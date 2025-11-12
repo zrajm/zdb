@@ -1,0 +1,150 @@
+#!/bin/env perl
+
+# https://perl.com/pub/2012/04/perlunicook-standard-preamble.html
+use utf8;      # so literals and identifiers can be in UTF-8
+use v5.12;     # or later to get "unicode_strings" feature
+use strict;    # quote strings, declare variables
+use warnings;  # on by default
+use warnings  qw(FATAL utf8);    # fatalize encoding glitches
+use open      qw(:std :utf8);    # undeclared streams in UTF-8
+use charnames qw(:full :short);  # unneeded in v5.16
+
+END { close(STDOUT) or die "Can't close standard output: $!\n" }
+
+our $AUTHOR='zrajm <zrajm@zrajm.org>';
+our $VERSION='0.0.1';                          # https://semver.org/
+our $VERSION_DATE='12 November 2025';
+our $CREATED_DATE='11 November 2025'; # never change this!
+our $PROGRAM = (split '/', decode(__FILE__))[-1];
+our $USAGE = <<"USAGE_END";
+Usage: $PROGRAM [OPTION]... [--] [[%TYPE] [QUERY]... [FIELD=VALUE]...]...
+Manipulate ZDB database.
+
+  -h, --help            Show this help and exit
+  -i, --ignore-case     Ignore case when searching (default)
+  -I, --no-ignore-case  Don't ignore case when searching
+      --version         Show version and exit
+
+Search is case-insensitive by default. Multiple QUERIES are AND:ed together. If
+FIELD=VALUE pairs are given, these are added to the matching record, or, if no
+is QUERY is given, a new record is inserted.
+
+USAGE_END
+
+###############################################################################
+# History
+#
+# [2025-11-11 00:51-06:50] & [2025-11-11 15:26-21:32, 00:04-02:20] & v0.0.1 -
+# Primitive initial functionality. Output a ZDB file (given a ZDB file on
+# standard input), and split the file into records internally while preserving
+# whitespace between records (and at the beginning & ending of file).
+#
+
+###############################################################################
+# Functions
+{
+    use Encode ();
+    state sub OPT() { Encode::FB_CROAK | Encode::LEAVE_SRC }
+    sub encode { eval { Encode::encode('UTF-8', shift // $_, OPT) } }
+    sub decode { eval { Encode::decode('UTF-8', shift // $_, OPT) } }
+}
+
+sub help {
+    print $USAGE;
+    exit 0;
+}
+
+sub version {
+    my ($years)    = $CREATED_DATE =~ m#(\d{4})#;
+    my ($end_year) = $VERSION_DATE =~ m#(\d{4})#;
+    $years .= "-$end_year" unless $years eq $end_year;
+    say "$PROGRAM $VERSION ($VERSION_DATE)\n",
+        "Copyright (C) $years $AUTHOR\n",
+        "License GPLv2: GNU GPL version 2 <https://gnu.org/licenses/gpl-2.0.html>.\n",
+        "This is free software: you are free to change and redistribute it.";
+    exit 0;
+}
+
+# FIXME: Be smarter. Don't load entire file into memory in constructor.
+# Also, maybe don't hardcode record and field separators?
+#
+# NOTE: Final record contain only whitespace (no data).
+{
+    package ZDB;
+
+    #my $ENTRY_SEPARATOR = qr/((?:\n|\A)\n+)(?!\h)/;
+    my $FIELD_SEPARATOR = qr/\n(?!\s)/;
+    my $ENTRY_REGEX = qr/((?:.+\R(?:\R+\h)?)+)/;
+
+    sub new {
+        my ($class, $file) = @_;
+        my $fh = open_file($file);
+        my $self = {
+            file => $file,
+            fh   => $fh,
+            rec  => [split($ENTRY_REGEX, do { local $/; <$fh> })],
+            num  => 0,
+        };
+        return bless($self, $class);
+    }
+
+    sub open_file {
+        my ($file) = @_;
+        if (defined $file) {
+            open(my $fh, '<', $file)
+                or die "Can't open file '$file' for reading: $!\n";
+            return $fh;
+        }
+        die "Can't read standard input from terminal\n" if -t STDIN;
+        return *STDIN;
+    }
+
+    # Final record will have only space, no data.
+    sub read_record {
+        my ($self) = @_;
+        my ($spc, $txt) = splice(@{$self->{rec}}, 0, 2);
+        return defined($spc)
+            ? ($spc, defined($txt) ? split($FIELD_SEPARATOR, $txt) : ())
+            : ();
+    }
+
+    sub DESTROY {
+        my ($self) = @_;
+        close($self->{fh}) or die defined($self->{file})
+            ? "Can't close file '$self->{file}': $!\n"
+            : "Can't close standard input: $!\n"
+            if $self->{fh};
+    }
+}
+
+###############################################################################
+# Main
+
+local %SIG = (
+    __WARN__ => sub { warn("$PROGRAM: @_") },
+    __DIE__  => sub {
+        die @_ if $^S;                         # abort if called inside eval
+        my $tip = (my $msg = "@_") =~ s/\.$//; # ending in '.' = extra help
+        die("$PROGRAM: $msg",
+            $tip ? "Try '$PROGRAM --help' for more information.\n" : ());
+    });
+
+my @arg;
+my %opt = (nocase => 1);
+@ARGV = map { decode } @ARGV;
+while (@ARGV) {
+    local $_ = shift;
+    /^    --               $/x and push(@arg, @ARGV), last;
+    /^(-h|--help)          $/x and help();
+    /^(-i|--ignore-case)   $/x and $opt{nocase} = 1, next;
+    /^(-I|--no-ignore-case)$/x and $opt{nocase} = 0, next;
+    /^(   --version)       $/x and version();
+    /^-                     /x and die "Unknown option '$_'.\n";
+}
+
+my $zdb = ZDB->new();
+while (my ($prespace, @rec) = $zdb->read_record()) {
+    print $prespace, map { "$_\n" } @rec;
+}
+
+#[eof]
