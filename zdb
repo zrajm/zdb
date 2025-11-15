@@ -9,36 +9,162 @@ use warnings  qw(FATAL utf8);    # fatalize encoding glitches
 use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
+use Data::Dumper;
+
 END { close(STDOUT) or die "Can't close standard output: $!\n" }
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
 our $VERSION='0.0.1';                          # https://semver.org/
-our $VERSION_DATE='12 November 2025';
+our $VERSION_DATE='15 November 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
 Usage: $PROGRAM [OPTION]... [--] [[%TYPE] [QUERY]... [FIELD=VALUE]...]...
 Manipulate ZDB database.
 
-  -h, --help            Show this help and exit
-  -i, --ignore-case     Ignore case when searching (default)
-  -I, --no-ignore-case  Don't ignore case when searching
-      --version         Show version and exit
+  -c                      Hilite even when piped (--color=always)
+  -C                      Turn off hilite (--color=never)
+      --color[=WHEN]      Hilite matching strings; WHEN = 'always' (if
+                          option w/o arg), 'never' or 'auto' (default)
+  -f, --file=FILE         Specify input file
+  -h, --help              Show this help and exit
+      --help-query        Show QUERY syntax (its very googlish)
+  -i, --ignore-case       Ignore case when searching (default)
+  -I, --no-ignore-case    Don't ignore case when searching
+      --test              Run built-in unit tests
+      --todo              Show TODO list (future prospects)
+      --version           Show version and exit
 
-Search is case-insensitive by default. Multiple QUERIES are AND:ed together. If
-FIELD=VALUE pairs are given, these are added to the matching record, or, if no
-is QUERY is given, a new record is inserted.
+QUERY arguments are joined (with space) before being parsed. If FIELD=VALUE
+pairs are given (and no QUERY), create new record those fields; if QUERY is
+given fields are added to the first matching record.
 
+ZDB always make minimal changes to files. Comments and whitespace are
+preserved, and resorting is only done on request.
+
+NOTE: QUERY cannot start with '-', unless preceded by '--' option. Putting a
+space (or comma) at the beginning of the QUERY argument also works.
 USAGE_END
+our $QUERY = <<"QUERY_END";
+NOTE: QUERY cannot start with '-', unless preceded by '--' option. Prefixing
+query with space (or comma) also works.
 
-###############################################################################
-# History
-#
-# [2025-11-11 00:51-06:50] & [2025-11-11 15:26-21:32, 00:04-02:20] & v0.0.1 -
-# Primitive initial functionality. Output a ZDB file (given a ZDB file on
-# standard input), and split the file into records internally while preserving
-# whitespace between records (and at the beginning & ending of file).
-#
+Special characters (in order of precedence)
+-------------------------------------------
+  \e[1m[...]\e[m      Field index
+  \e[1m:\e[m (colon)  Field name delimiter
+  \e[1m-\e[m (minus)  NOT
+  \e[1m␣\e[m (space)  AND
+  \e[1m,\e[m (comma)  OR
+  \e[1m(...)\e[m      Grouping
+
+* \e[1mname:\e[m = Find records with field called 'name'.
+* \e[1m-name:\e[m = \e[1m-(name:)\e[m = Find records without field 'name'.
+* \e[1mname:emma\e[m = \e[1m(name: && name:emma)\e[m = Find records where field 'name' exists
+  and contains 'emma'.
+* \e[1m-name:emma\e[m = \e[1m-(name: || name:emma)\e[m = Find records without field 'name', and
+  records where it exists, but does not contain 'emma'.
+* \e[1mname:-emma\e[m = \e[1m(name: && -name:emma)\e[m = Find records where field 'name' exists,
+  but does not contain 'emma'.
+
+* \e[1m(-name):emma\e[m = \e[1m(-name: && name:emma)\e[m = NONSENSE. Find records without field
+  'name', but where field name contains 'emma'.
+
+QUERY_END
+our $QUERY2 = <<"QUERY_END";
+
+* \e[1mname:emma\e[m = match records which have field called 'name',
+  containing word 'emma'.
+
+\e[1m-name:emma\e[m = \e[1m-(name:emma)\e[m = match records where
+\e[1m-name:emma\e[m = \e[1m-(name:emma)\e[m = match records where
+
+FIELD,FIELD2:VALUE1 VALUE2
+
+FIELD[INDEX]:       --- FIELD must exist
+FIELD[INDEX]:EXPR   --- must match EXPR
+EXPR                --- EXPR must match some field
+
+'name,alias:lars emma' = name,((alias:lars) emma)
+  * find records containing either word 'name'
+  * OR records containing an 'alias' field with the word 'lars', and any
+    field with the word 'emma'
+
+'name,alias:lars emma' = ((name,alias):(lars emma))
+
+'name,alias:lars' 'emma' = ((name,alias):lars) emma
+
+'name,alias:lars,emma' = ((name,alias):(lars,emma))
+
+'name,alias:lars' , 'emma' = ((name,alias):lars),emma <-- REALLY?
+
+or
+   and  and and
+             or  or
+[  [],  [], [[], []]]
+
+#['or', QUERY...]
+#['and', QUERY...]
+['not', QUERY...]
+
+[qr//, qr//]   # matcher
+
+-(field:thingy)
+
+field:(-thingy, other)
+
+Boolean precedence:
+
+
+Meaning that: NOT -> AND -> OR (`a, -b c` = `a, (-b c)`).
+
+tlh:(tlha tlhup)
+
+(en sv):(bok,book)
+
+(en sv):(bok,tlh:book)
+
+# Option to enable/disable diacritics (without 'a' would match 'ä')
+QUERY_END
+
+our $HISTORY = <<"HISTORY_END";
+[2025-11-11 00:51-06:50] & [2025-11-11 15:26-21:32, 00:04-02:20] v0.0.1 -
+Primitive initial functionality. Output a ZDB file (given a ZDB file on
+standard input), and split the file into records internally while preserving
+whitespace between records (and at the beginning & ending of file).
+
+[2025-11-11 15:26-16:11, 19:45-21:31] & [2025-11-12 00:04-03:28, 05:02-07:12]
+[2025-11-14 01:03-06:30, 18:10-11:42] v0.1.0 - Defined internal query format,
+and internal data format. File now loads into the new format loading.
+Implemented search (using a simple hardcoded query). Added hiliting of search
+result (including overlapping matches).
+HISTORY_END
+
+our $TODO = <<"TODO_END";
+* Parse query on command line
+* Sorting
+* Data insertion
+  * Inserting new record (= no QUERY on command line).
+  * Inserting fields into existing record (= QUERY on command line).
+* Atomic file updates
+* Save all diffs made in 'FILE.zdb' dir (or zip archive?)
+* Encryption (pipe input/output through external secure tool)
+  (also, how make THESE diffs secure -- encrypted archive of some kind?)
+* Selection of hilite color
+* Document the internal data structures
+* Add option to resort input (using '%sort' specifications) -- NEVER sort
+  unless explicitly requested
+* Date fields (look at recutils, but also allow YYYY only, or YY-MM etc.) (like
+  'date --iso=...' but also for 'month' and 'year', and also the ones supported
+  by date: 'date', 'hour', 'minute', 'second', 'ns')
+* Verifying fields
+* Deleting records & fields
+TODO_END
+
+# Recutils:
+# https://www.gnu.org/software/recutils/manual/recutils.html
+#  * field name: '[a-zA-Z%][a-zA-Z0-9_]*'
+#  * type name:  '[a-zA-Z][a-zA-Z0-9_]*'
 
 ###############################################################################
 # Functions
@@ -49,20 +175,131 @@ USAGE_END
     sub decode { eval { Encode::decode('UTF-8', shift // $_, OPT) } }
 }
 
-sub help {
-    print $USAGE;
-    exit 0;
-}
-
 sub version {
     my ($years)    = $CREATED_DATE =~ m#(\d{4})#;
     my ($end_year) = $VERSION_DATE =~ m#(\d{4})#;
     $years .= "-$end_year" unless $years eq $end_year;
-    say "$PROGRAM $VERSION ($VERSION_DATE)\n",
-        "Copyright (C) $years $AUTHOR\n",
-        "License GPLv2: GNU GPL version 2 <https://gnu.org/licenses/gpl-2.0.html>.\n",
-        "This is free software: you are free to change and redistribute it.";
-    exit 0;
+    return <<~"VERSION_END";
+    $PROGRAM $VERSION ($VERSION_DATE)
+    Copyright (C) $years $AUTHOR
+    License GPLv2: GNU GPL version 2 <https://gnu.org/licenses/gpl-2.0.html>.
+    This is free software: you are free to change and redistribute it.
+    VERSION_END
+}
+
+# FIXME: Use Perl testing framework (Test::Simple, Test::More or similar)
+# FIXME: Test some actual queries
+#        my $record = record(<<~"END_RECORD");
+#            country	Greenland
+#            name	Anders Grönroot
+#            END_RECORD
+sub test {
+    sub x { my ($x) = @_; return $x }
+    !any(\&x, [])           or die "any => []";                # OR mode (default).
+     any(\&x, [1])          or die "any => [1]";
+    !any(\&x, [0, 0])       or die "any => [0, 0]";
+     any(\&x, [0, 1])       or die "any => [0, 1]";
+     any(\&x, [1, 0])       or die "any => [1, 0]";
+     any(\&x, [1, 1])       or die "any => [1, 1]";
+    !any(\&x, [0, 0, 0])    or die "any => [0, 0, 0]";
+     any(\&x, [0, 0, 1])    or die "any => [0, 0, 1]";
+     any(\&x, [0, 1, 0])    or die "any => [0, 1, 0]";
+     any(\&x, [0, 1, 1])    or die "any => [0, 1, 1]";
+     any(\&x, [1, 0, 0])    or die "any => [1, 0, 0]";
+     any(\&x, [1, 0, 1])    or die "any => [1, 0, 1]";
+     any(\&x, [1, 1, 0])    or die "any => [1, 1, 0]";
+     any(\&x, [1, 1, 1])    or die "any => [1, 1, 1]";
+     all(\&x, [])           or die "all => []";                # AND mode.
+     all(\&x, [1])          or die "all => [1]";
+    !all(\&x, [0, 0])       or die "all => [0, 0]";
+    !all(\&x, [0, 1])       or die "all => [0, 1]";
+    !all(\&x, [1, 0])       or die "all => [1, 0]";
+     all(\&x, [1, 1])       or die "all => [1, 1]";
+    !all(\&x, [0, 0, 0])    or die "all => [0, 0, 0]";
+    !all(\&x, [0, 0, 1])    or die "all => [0, 0, 1]";
+    !all(\&x, [0, 1, 0])    or die "all => [0, 1, 0]";
+    !all(\&x, [0, 1, 1])    or die "all => [0, 1, 1]";
+    !all(\&x, [1, 0, 0])    or die "all => [1, 0, 0]";
+    !all(\&x, [1, 0, 1])    or die "all => [1, 0, 1]";
+    !all(\&x, [1, 1, 0])    or die "all => [1, 1, 0]";
+     all(\&x, [1, 1, 1])    or die "all => [1, 1, 1]";
+    !recurse(\&x, [])           or die "recurse => []";        # OR mode (default).
+     recurse(\&x, [1])          or die "recurse => [1]";
+    !recurse(\&x, [0, 0])       or die "recurse => [0, 0]";
+     recurse(\&x, [0, 1])       or die "recurse => [0, 1]";
+     recurse(\&x, [1, 0])       or die "recurse => [1, 0]";
+     recurse(\&x, [1, 1])       or die "recurse => [1, 1]";
+    !recurse(\&x, [0, 0, 0])    or die "recurse => [0, 0, 0]";
+     recurse(\&x, [0, 0, 1])    or die "recurse => [0, 0, 1]";
+     recurse(\&x, [0, 1, 0])    or die "recurse => [0, 1, 0]";
+     recurse(\&x, [0, 1, 1])    or die "recurse => [0, 1, 1]";
+     recurse(\&x, [1, 0, 0])    or die "recurse => [1, 0, 0]";
+     recurse(\&x, [1, 0, 1])    or die "recurse => [1, 0, 1]";
+     recurse(\&x, [1, 1, 0])    or die "recurse => [1, 1, 0]";
+     recurse(\&x, [1, 1, 1])    or die "recurse => [1, 1, 1]";
+     recurse(\&x, [], 1)        or die "recurse => []";        # AND mode.
+     recurse(\&x, [1], 1)       or die "recurse => [1]";
+    !recurse(\&x, [0, 0], 1)    or die "recurse => [0, 0]";
+    !recurse(\&x, [0, 1], 1)    or die "recurse => [0, 1]";
+    !recurse(\&x, [1, 0], 1)    or die "recurse => [1, 0]";
+     recurse(\&x, [1, 1], 1)    or die "recurse => [1, 1]";
+    !recurse(\&x, [0, 0, 0], 1) or die "recurse => [0, 0, 0]";
+    !recurse(\&x, [0, 0, 1], 1) or die "recurse => [0, 0, 1]";
+    !recurse(\&x, [0, 1, 0], 1) or die "recurse => [0, 1, 0]";
+    !recurse(\&x, [0, 1, 1], 1) or die "recurse => [0, 1, 1]";
+    !recurse(\&x, [1, 0, 0], 1) or die "recurse => [1, 0, 0]";
+    !recurse(\&x, [1, 0, 1], 1) or die "recurse => [1, 0, 1]";
+    !recurse(\&x, [1, 1, 0], 1) or die "recurse => [1, 1, 0]";
+     recurse(\&x, [1, 1, 1], 1) or die "recurse => [1, 1, 1]";
+}
+
+###############################################################################
+
+sub uniq {
+    my %seen;
+    return grep { !$seen{$_}++ } @_;
+}
+
+# FIXME: Should replace all control chars with equivalent '\x' code.
+sub quotefunny {
+    local ($_) = @_;
+    local $" = '';
+    my %t = ("\0" => '\0', "\a" => '\a', "\b" => '\b', "\e" => '\e',
+             "\f" => '\f', "\n" => '\n', "\r" => '\r', "\t" => '\t');
+    s#[@{[ keys(%t) ]}]#$t{$&}#g;
+    return $_;
+}
+
+sub stringify_hashref {
+    my ($x) = @_;
+    my $txt = join('', map { "$_: $x->{$_}\n" } keys %$x);
+    $txt =~ s#^#  #mg;
+    return "{\n$txt}\n";
+}
+
+sub stringify_query {
+    my ($query) = @_;
+    return stringify_hashref($query->()) if ref($query) eq 'CODE';
+    if (ref($query) eq 'ARRAY') {
+        my $txt = join('', map { stringify_query($_) } @$query);
+        $txt =~ s#^# · #mg;
+        return "[\n$txt]\n";
+    }
+    die "Error in query " . ref($query);
+}
+
+# FIXME: remove & instead use loaded ZDB file
+# my $record = record(<<~"END_RECORD");
+#     country	Greenland
+#     name	Anders Grönroot
+#     END_RECORD
+sub record {
+    my ($str) = @_;
+    my @record;
+    while ($str =~ m#\G(\n*)(\w+)(\h+)(.*)(\n)#gc) {
+        push(@record, { field => $2, value => $4, space => [$1, $3, $5] });
+    }
+    return \@record;
 }
 
 # FIXME: Be smarter. Don't load entire file into memory in constructor.
@@ -73,9 +310,8 @@ sub version {
     package ZDB;
 
     #my $ENTRY_SEPARATOR = qr/((?:\n|\A)\n+)(?!\h)/;
-    my $FIELD_SEPARATOR = qr/\n(?!\s)/;
+    my $FIELD_SEPARATOR = qr/(?<=\n(?!\s))/;
     my $ENTRY_REGEX = qr/((?:.+\R(?:\R+\h)?)+)/;
-
     sub new {
         my ($class, $file) = @_;
         my $fh = open_file($file);
@@ -100,12 +336,26 @@ sub version {
     }
 
     # Final record will have only space, no data.
+    use Data::Dumper;
     sub read_record {
         my ($self) = @_;
         my ($spc, $txt) = splice(@{$self->{rec}}, 0, 2);
-        return defined($spc)
-            ? ($spc, defined($txt) ? split($FIELD_SEPARATOR, $txt) : ())
-            : ();
+        return ()     if not defined($spc);
+        return ($spc) if not defined($txt);
+
+        my $FIELD_END = qr/(\n)(?!\s)/;
+        my $FIELD_SEP = qr/\h+/;
+
+        # FIXME: Handling of comments?
+        my @record; #      1    2       [3]         [4]    5
+        while ($txt =~ m/\G(\n*)(.*?)(?:($FIELD_SEP)(.*?))?($FIELD_END)/gcs) {
+            push(@record, {
+                field => $2,
+                value => $4 // '',
+                space => [$1, $3 // '', $5],
+            });
+        }
+        return ($spc, @record);
     }
 
     sub DESTROY {
@@ -115,6 +365,256 @@ sub version {
             : "Can't close standard input: $!\n"
             if $self->{fh};
     }
+}
+
+###############################################################################
+
+# FIXME: turn this into module?
+
+# Returns a matcher function. Matcher function takes two args ($field name &
+# $value) and returns true/false. If called without args it returns a structure
+# to describe itself.
+sub match_value_regex {
+    my ($regex) = @_;
+    my ($INVERT, $UNINVERT) = ("\e[7m", "\e[27m");
+    return sub {
+        my ($field, $value) = @_ or return {
+            # structure describing ourself
+            type  => 'regex',
+            match => 'value',
+            regex => $regex,
+        };
+        #return $value =~ $regex;  # simple true/false
+        return $value =~ s#$regex#$INVERT$&$UNINVERT#g
+            ? ($field, $value) : ();
+    };
+}
+
+# Test all elements in $array by invoking callback (passing the element as
+# arg). If third argument is provided and is truthy, it'll operate in AND (or
+# all) mode, without it OR (or any) mode is used
+my $VERBOSE_RECURSE = 0;
+sub recurse { # $and: true = AND/all / false = OR/any
+    my ($func, $array, $and) = @_;
+    say('  ' . ($and ? 'AND' : 'OR')) if $VERBOSE_RECURSE;
+    my $match = $and;
+    for (@$array) {
+        $match = !$and if $func->($_) xor $and;
+    }
+    return $match;
+}
+sub any {
+    my ($func, $list) = @_;
+    for (@$list) { return 1 if $func->($_) }
+    return ();
+}
+sub all {
+    my ($func, $list) = @_;
+    for (@$list) { return () unless $func->($_) }
+    return 1;
+}
+
+# FIXME: Be smarter about short-circuiting (it can be done when no hilite is
+# needed, e.g. on a negative match, or when hilite is off).
+#
+# SHORTCUTTING: version (will only hilite first match).
+# sub recurse { # $and: true = AND/all / false = OR/any
+#     my ($func, $array, $and) = @_;
+#     say('  ' . ($and ? 'AND' : 'OR')) if $VERBOSE_RECURSE;
+#     for (@$array) {
+#         return !$and if $func->($_) xor $and;
+#     }
+#     return $and;
+# }
+
+sub match {
+    my ($query, $record, $lvl) = @_;
+    $lvl //= 0;                                # even = AND, odd = OR
+
+    # Subquery.
+    if (ref($query) eq 'ARRAY') {
+        my $match = recurse(
+            sub {
+                my ($subquery) = @_;
+                return match($subquery, $record, !$lvl);
+            },
+            $query,
+            $lvl % 2,
+        );
+        return $match ? $record : '';
+    }
+
+    die "Error in query" unless ref($query) eq 'CODE';
+
+    my $match = 0;
+    for my $field (@$record) {
+        my ($name, $value) = ($field->{field}, $field->{value});
+
+        #say "----------------------------------------";
+        my ($pre, $sep, $post) = @{ $field->{space} };
+        # say "READ: << '" . quotefunny("$pre$name$sep$value$post") . "'";
+        # print "PROC: ", stringify_hashref($query->());
+
+        my @hilited = $query->($name, $value);
+        if (@hilited) {
+            # Insert hilited values into record.
+            my ($name2, $value2) = @hilited;
+            push(@{$field->{field_hilite}}, $name2)  if $name2  ne $name;
+            push(@{$field->{value_hilite}}, $value2) if $value2 ne $value;
+
+            #($name, $value) = @hilited;
+            #print "('$name', '$value') matches " . Dumper($query->());
+            $match = 1;
+        }
+    }
+    return $match ? $record : '';
+}
+
+# {
+#     package Query;
+
+#     sub new {
+#         my ($class, $query_str) = @_;
+#         #            or
+#         #            |and
+#         #            ||
+#         my $query => [[\&TRUE]];
+
+#         my $self = { query => $query };
+#         return bless($self, $class);
+#     }
+
+#     sub TRUE {
+#         my ($field, $value) = @_;
+#         say 'TRUE';
+#         return 1;
+#     }
+
+#     sub match {
+#         my ($self, $record) = @_;
+#         return _match($self->{query}, $record, 0);
+#     }
+
+#     sub _any {
+#         my ($func, $list) = @_;
+#         for (@$list) { return 1 if $func->($_) }
+#         return ();
+#     }
+#     sub _all {
+#         my ($func, $list) = @_;
+#         for (@$list) { return () unless $func->($_) }
+#         return 1;
+#     }
+
+#     sub _match {
+#         my ($query, $record, $and) = @_;  # true = and / false = or
+
+#         sub recurse { _match(shift(), $record, $and ^ 1) }
+
+#         if (ref($query) eq 'ARRAY') {          # subquery
+#             return $and
+#                 ? _all(\&recurse, $query)
+#                 : _any(\&recurse, $query);
+#         }
+#         die "Error in query" if ref($query) ne 'HASH';
+
+#         # Base case.
+#         while (my ($pre, $name, $sep, $value, $post) = $record->get_field()) {
+
+
+
+
+#         }
+#         return 'xxxx';
+
+#         match(x, $record, 1)
+#     }
+# }
+
+
+# Merges strings with ANSI background hilite. All strings must be identical
+# except for their ANSI markup. Background color, bold, dim & bold/dim reset,
+# invert & invert reset are stripped and background hilite (or invert) is
+# replaced. Any overlapping hilites will have a bright background + bold text
+# (regardless of the number of overlapping hilites). BUG: This function will
+# naïvely destroy any ANSI codes with semicolon-separated arguments (e.g.
+# `\e[58;5;<n>m`), if any of the arguments looks a code that should be
+# processed. To avoid this, only feed this function text with ANSI codes w/o
+# arguments, or codes with colon-separated arguments.
+sub merge_ansi {
+    my @str = @_ or die "Need at least one string";
+
+    # Strip ANSI from all strings. Remember position & string.
+    my $ESC = qr/\e\[([0-9;:]*)m/;
+    my %ansi;
+    for (@str) {
+        my $i = 0;                             # count removed chars
+        s{$ESC}{                               # remove & add to %ansi
+            push @{$ansi{ pos() - $i }}, split(';', $1);
+            $i += length($&);
+            '';
+        }ge;
+    }
+    # Check that strings are identical after ANSI stripping.
+    if ((@str = uniq(@str)) > 1) {
+        die("Strings must not differ after stripping ANSI codes:\n",
+            map { "  '$_'\n" } @str);
+    }
+    #                          STYLE   FOREGR.  BACKGR.
+    my $NORMAL = '22;39;49'; # unbold; normal;  normal
+    my $HILITE = '22;30;46'; # unbold; black;   teal
+    my $EXTRA  = '1;30;106'; # bold;   black;   bright teal
+
+    # Go through removed strings, in order.
+    my ($out, $col, $prev_col, $prev_pos) = ('', 0, 0, 0);
+    for my $pos (sort { $a <=> $b } keys %ansi) {
+
+        # Strip bold, dim, bold/dim reset, normal & bright background.
+        my @ansi = grep {
+            $col += 1 if /^(7|(4|10)[0-8])$/;  # background color
+            $col -= 1 if /^(27|49|109)$/;      # background reset
+            !/^(1|2|7|22|27|4\d|10\d)$/;
+        } @{$ansi{$pos}};
+
+        # Set ANSI hilite (for $col > 2 just use $EXTRA).
+        if ($col > $prev_col) {            # intensity went up
+            push(@ansi, $HILITE) if $col == 1;
+            push(@ansi, $EXTRA)  if $col >= 2;
+        } elsif ($col < $prev_col) {       # intensity went down
+            push(@ansi, $HILITE) if $col == 1;
+            push(@ansi, $NORMAL) if $col == 0;
+        }
+
+        # Insert substring & ANSI code.
+        $out .= substr($str[0], $prev_pos, $pos - $prev_pos)
+            . (@ansi ? "\e[" . join(';', @ansi) . "m" : '');
+        ($prev_pos, $prev_col) = ($pos, $col);
+    }
+    return $out . substr($str[0], $prev_pos) . ($col > 0 ? $NORMAL : '');
+}
+
+###############################################################################
+
+sub colorarg {
+    my ($arg) = @_;
+    my $opt = do {
+        local $_ = $arg // $ARGV[0] // '';
+        /^(auto  |if-tty|tty)$/x ? -t STDOUT :
+        /^(always|force |yes)$/x ?         1 :
+        /^(never |none  |no )$/x ?        '' : undef;
+    };
+    if (defined $opt) {                        # option found
+        shift @ARGV if not defined($arg);      # '--color WHEN' (w/o equals)
+        return $opt;
+    }
+    # Option value not found.
+    die "Unknown argument '$arg' for '--color'\n",
+        "Valid arguments are:\n",
+        "  - 'always', 'yes', 'force'\n",
+        "  - 'never', 'no', 'none'\n",
+        "  - 'auto', 'tty', 'if-tty'.\n"
+        if defined($arg);                      # '--color=WHEN' (w/ equals)
+    return 1;
 }
 
 ###############################################################################
@@ -129,22 +629,73 @@ local %SIG = (
             $tip ? "Try '$PROGRAM --help' for more information.\n" : ());
     });
 
-my @arg;
-my %opt = (nocase => 1);
+my $out;
+my @query = ();
+my %opt = (
+    color  => -t STDOUT,
+    file   => undef,
+    nocase => 1,
+    test   => 0,
+);
 @ARGV = map { decode } @ARGV;
+
 while (@ARGV) {
     local $_ = shift;
-    /^    --               $/x and push(@arg, @ARGV), last;
-    /^(-h|--help)          $/x and help();
-    /^(-i|--ignore-case)   $/x and $opt{nocase} = 1, next;
-    /^(-I|--no-ignore-case)$/x and $opt{nocase} = 0, next;
-    /^(   --version)       $/x and version();
-    /^-                     /x and die "Unknown option '$_'.\n";
+    /^-/ or do { push(@query, $_); next };  # non-option = QUERY
+    # NOTE! Shortopts w/o args in here!
+    s/(?<=^-[^-f]).+//x            and unshift(@ARGV, "-$&"); # bundled opts
+    /^        --               $/x and do { push(@query, @ARGV);        last };
+    /^ -c                      $/x and do { $opt{color} = 1;            next };
+    /^ -C                      $/x and do { $opt{color} = 0;            next };
+    /^        --colou?r(=(.*))?$/x and do { $opt{color} = colorarg($2); next };
+    /^(-f(.*)|--file  (=(.*))?)$/x and do { $opt{file} = $2||$4//shift; next };
+    /^(-h    |--help          )$/x and do { $out = $USAGE;              next };
+    /^(       --help-query    )$/x and do { $out = $QUERY;              next };
+    /^(-i    |--ignore-case   )$/x and do { $opt{nocase} = 1;           next };
+    /^(-I    |--no-ignore-case)$/x and do { $opt{nocase} = 0;           next };
+    /^(       --test          )$/x and do { $opt{test} = 1;             next };
+    /^(       --todo          )$/x and do { $out = $TODO;               next };
+    /^(       --version       )$/x and do { $out = version();           next };
+    die "Unknown option '$_'.\n";
 }
+if ($out) {
+    print($out);
+    exit;
+};
+if ($opt{test}) {
+    say test() ? 'ALL TESTS OK' : 'TESTS FAILED';
+    exit;
+};
 
-my $zdb = ZDB->new();
-while (my ($prespace, @rec) = $zdb->read_record()) {
-    print $prespace, map { "$_\n" } @rec;
+# FIXME: Parse & use query from command line
+$opt{query} = "@query";
+
+#@query = map { qr/$_/ } @query;
+
+#my $query = new Query("@query");
+
+#            or
+#            |and and
+#            ||   |
+#my $query = [[], []];
+my $query = [
+    #match_value_regex(qr/bach/i),
+    #match_value_regex(qr/said no/i),
+];
+
+my $zdb = new ZDB($opt{file});
+while (my ($prespace, @field) = $zdb->read_record()) {
+    match($query, \@field) or next;
+
+    # FIXME: Don't waste time generating hilite if --color=never.
+    print $prespace;
+    for my $field (@field) {
+        my $name  = ($opt{color} ? $field->{field_hilite} : ()) || [$field->{field}];
+        my $value = ($opt{color} ? $field->{value_hilite} : ()) || [$field->{value}];
+        my ($pre, $sep, $post) = @{ $field->{space} };
+
+        print $pre . merge_ansi(@$name) . $sep . merge_ansi(@$value) . $post;
+    }
 }
 
 #[eof]
