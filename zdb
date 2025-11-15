@@ -14,7 +14,7 @@ use Data::Dumper;
 END { close(STDOUT) or die "Can't close standard output: $!\n" }
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.0.1';                          # https://semver.org/
+our $VERSION='0.1.1';                          # https://semver.org/
 our $VERSION_DATE='15 November 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -28,6 +28,7 @@ Manipulate ZDB database.
                           option w/o arg), 'never' or 'auto' (default)
   -f, --file=FILE         Specify input file
   -h, --help              Show this help and exit
+      --help-internals    Show info about internals
       --help-query        Show QUERY syntax (its very googlish)
   -i, --ignore-case       Ignore case when searching (default)
   -I, --no-ignore-case    Don't ignore case when searching
@@ -138,10 +139,13 @@ whitespace between records (and at the beginning & ending of file).
 and internal data format. File now loads into the new format loading.
 Implemented search (using a simple hardcoded query). Added hiliting of search
 result (including overlapping matches).
+
+[2025-11-14 11:42-12:22] v0.1.1 - Documented internals somewhat.
 HISTORY_END
 
 our $TODO = <<"TODO_END";
 * Parse query on command line
+* Pager function (piping to less turns off hilite, use pager to avoid)
 * Sorting
 * Data insertion
   * Inserting new record (= no QUERY on command line).
@@ -159,7 +163,64 @@ our $TODO = <<"TODO_END";
   by date: 'date', 'hour', 'minute', 'second', 'ns')
 * Verifying fields
 * Deleting records & fields
+* Add manpage (`--man` option) -- use Markdown for this?
 TODO_END
+
+our $INTERNALS = <<'INTERNALS_END';
+QUERY FORMAT
+============
+Internally query tree structure, consisting is a nested lists, where the leaves
+are functions. These matcher functions are called for each field/value pair,
+and aggregated. When not matching they should return the empty list, and when
+matching they return the field and value pair again, with possible hilites
+(achieved using ANSI escape code for inverting '\e7m...\e[27m'). When a matcher
+function is called without arguments, it should return data about itself (exact
+format to be decided) -- this is to allow for creating a cleaned-up version of
+the original query by traversing the tree.
+
+The root node of the tree is always OR:ed, and nodes inside that are AND:ed,
+and those inside those are OR:ed etc.
+
+    or
+    |and       and
+    ||or  or   |
+    |||   |    |
+    [[[], []], []]
+
+When creating the query a function that returns a function is used. A query may
+thus be constructed along the lines of:
+
+                or
+                |and
+                ||
+    my $query = [[value_regex(qr/name/i), value_regex(qr/McGuffin/i)]]
+
+This would result in a query that'll find all records which have a field
+'name', and a value containing 'McGuffin' (case-insensitively). More complex
+functions could of course be constructed, maybe something like?
+
+    regex({ name => qr/name/i, value => qr/McGuffin/i })
+
+
+DATA REPRESENTATION
+===================
+In the main loop `read_record()` is called over and over until the entire file
+has been read. (And the query is used in turn for each record to determine
+whether or not to output it.) `read_record()` returns two values, first is a
+string containing the leading whitespace (i.e. the whitespace occurring between
+this record and the previous one), second is an array containing one hashref
+for each field in the record. The hashref has the following format:
+
+    { field => ..., value => ..., space => [..., ..., ...] }
+
+Where `field` & `value` are the name & value of the field (these are passed to
+the matcher functions when performing a query), and `space` contains the
+whitespace coming before the field, between name and value and after the field.
+In the ZDB format the first value is always an empty string, and the last
+always a newline. (These are mostly for future proofing, and having the option
+of supporting other data formats in the future.) Middle value may vary
+depending on the amount of whitespace used between the field name and value.
+INTERNALS_END
 
 # Recutils:
 # https://www.gnu.org/software/recutils/manual/recutils.html
@@ -650,6 +711,7 @@ while (@ARGV) {
     /^        --colou?r(=(.*))?$/x and do { $opt{color} = colorarg($2); next };
     /^(-f(.*)|--file  (=(.*))?)$/x and do { $opt{file} = $2||$4//shift; next };
     /^(-h    |--help          )$/x and do { $out = $USAGE;              next };
+    /^(       --help-internals)$/x and do { $out = $INTERNALS;          next };
     /^(       --help-query    )$/x and do { $out = $QUERY;              next };
     /^(-i    |--ignore-case   )$/x and do { $opt{nocase} = 1;           next };
     /^(-I    |--no-ignore-case)$/x and do { $opt{nocase} = 0;           next };
