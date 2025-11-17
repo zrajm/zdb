@@ -515,7 +515,12 @@
 #
 
 ###############################################################################
-%rec	word
+%rec		word
+%key		id
+%unique		tlh pos en sv def tag
+%mandatory	tlh pos en sv def tag
+%allowed	desc def warn desc ref cite com pun see data meta
+%sort		tlh
 
 tlh	{bach} [1]
 pos	verb
@@ -1658,11 +1663,14 @@ ref	TDNW; KLINW
 tag	2003
 id	Hdd
 
-tlh	{borg}
+tlh	{borgh}
 pos	noun
-en	<Borg>
-sv	<borg>
-def	LangFest19: Klingon Workshop (https://youtu.be/5G_v20YlwWc?t=3602)
+en	«Borg»
+sv	«borg»
+def	LangFest19
+tag	2019
+id	VgH
+meta	Klingon Workshop; https://youtu.be/5G_v20YlwWc?t=3602
 
 tlh	{borghel}
 pos	noun
