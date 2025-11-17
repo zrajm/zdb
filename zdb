@@ -11,28 +11,36 @@ use charnames qw(:full :short);  # unneeded in v5.16
 
 use Data::Dumper;
 
-END { close(STDOUT) or die "Can't close standard output: $!\n" }
+my $pager_pid;
+END {
+    if ($? > 0) {
+        kill('TERM', $pager_pid) if $pager_pid;
+    } else {
+        close STDOUT or die "Can't close standard output: $!\n";
+    }
+    wait();                                    # wait for pager to exit
+}
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.2.0';                          # https://semver.org/
-our $VERSION_DATE='15 November 2025';
+our $VERSION='0.3.0';                          # https://semver.org/
+our $VERSION_DATE='17 November 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
 Usage: $PROGRAM [OPTION]... [--] [[%TYPE] [QUERY]... [FIELD=VALUE]...]...
 Manipulate ZDB database.
 
-  -c                      Hilite even when piped (--color=always)
-  -C                      Turn off hilite (--color=never)
-      --color[=WHEN]      Hilite matching strings; WHEN = 'always' (if
-                          option w/o arg), 'never' or 'auto' (default)
+      --color[=WHEN]      Highlight matching strings
+                          WHEN = 'auto' (default), 'always' or 'never'
+  -c                      Highlight even when piped (--color=always)
+  -C                      Disable highlighting (--color=never)
   -f, --file=FILE         Specify input file
   -h, --help              Show this help and exit
-      --help-query        Show QUERY syntax (its very googlish)
+      --help-query        Show QUERY syntax (it's very googlish)
   -i, --ignore-case       Ignore case when searching (default)
-      --manpage           Show the program manpage
   -I, --no-ignore-case    Don't ignore case when searching
-  -P, --pager=CMD         Use CMD to show output (default: 'less')
+      --manpage           Show zdb manpage
+  -P, --pager=CMD         Use CMD to show output (default: 'pager')
       --test              Run built-in unit tests
       --version           Show version and exit
 
@@ -51,7 +59,7 @@ NOTE: QUERY cannot start with '-', unless preceded by '--' option. Prefixing
 query with space (or comma) also works.
 
 Special characters (in order of precedence)
--------------------------------------------
+-------------------------------------
   \e[1m[...]\e[m      Field index
   \e[1m:\e[m (colon)  Field name delimiter
   \e[1m-\e[m (minus)  NOT
@@ -155,24 +163,22 @@ sub version {
 }
 
 sub manpage {
-    my $data = <<~"MANPAGE_END";
-        SYNOPSIS
-        ========
-        $USAGE
+    # Run 'pod2man'.
+    open my $fh, '-|', qw/pod2man --utf8 --errors=die/,
+        "--release=$PROGRAM $VERSION", __FILE__
+        or die "Can't exec 'pod2man': $!\n";
+    my @manpage = <$fh>;
+    close($fh) or die (
+        "Command 'pod2man' failed: " .
+        ($! || "Exit status " . ($? >> 8)) . "\n");
 
-        QUERY SYNTAX
-        ============
-        $QUERY
-        MANPAGE_END
-    while (<DATA>) {
-        last if /^__END__$/;
-        $data .= $_;
-    }
-    close(DATA) or die "Can't close filehandle 'DATA': $!\n";
-    return $data;
+    # Output result to 'man'.
+    my $pid = open(STDOUT, '|-', qw/man -l -/)
+        or die "Can't exec 'man': $!\n";
+    print @manpage;
+    exit 0;
 }
 
-# FIXME: Use Perl testing framework (Test::Simple, Test::More or similar)
 # FIXME: Test some actual queries
 #        my $record = record(<<~"END_RECORD");
 #            country	Greenland
@@ -399,10 +405,10 @@ sub all {
     return 1;
 }
 
-# FIXME: Be smarter about short-circuiting (it can be done when no hilite is
-# needed, e.g. on a negative match, or when hilite is off).
+# FIXME: Be smarter about short-circuiting (it can be done when no highlight is
+# needed, e.g. on a negative match, or when highlight is off).
 #
-# SHORTCUTTING: version (will only hilite first match).
+# SHORTCUTTING: version (will only highlight first match).
 # sub recurse { # $and: true = AND/all / false = OR/any
 #     my ($func, $array, $and) = @_;
 #     say('  ' . ($and ? 'AND' : 'OR')) if $VERBOSE_RECURSE;
@@ -517,11 +523,11 @@ sub match {
 # }
 
 
-# Merges strings with ANSI background hilite. All strings must be identical
+# Merges strings with ANSI background highlight. All strings must be identical
 # except for their ANSI markup. Background color, bold, dim & bold/dim reset,
-# invert & invert reset are stripped and background hilite (or invert) is
-# replaced. Any overlapping hilites will have a bright background + bold text
-# (regardless of the number of overlapping hilites). BUG: This function will
+# invert & invert reset are stripped and background highlight (or invert) is
+# replaced. Any overlapping highlights will have a bright background + bold text
+# (regardless of the number of overlapping highlights). BUG: This function will
 # naïvely destroy any ANSI codes with semicolon-separated arguments (e.g.
 # `\e[58;5;<n>m`), if any of the arguments looks a code that should be
 # processed. To avoid this, only feed this function text with ANSI codes w/o
@@ -619,12 +625,12 @@ my @query = ();
 my %opt = (
     color  => -t STDOUT,
     file   => undef,
+    man    => '',
     nocase => 1,
-    pager  => $ENV{PAGER} // 'less',
+    pager  => $ENV{PAGER} // 'pager',
     test   => 0,
 );
 @ARGV = map { decode } @ARGV;
-
 while (@ARGV) {
     local $_ = shift;
     /^-/ or do { push(@query, $_); next };  # non-option = QUERY
@@ -639,26 +645,22 @@ while (@ARGV) {
     /^(       --help-query    )$/x and do { $out = $QUERY;              next };
     /^(-i    |--ignore-case   )$/x and do { $opt{nocase} = 1;           next };
     /^(-I    |--no-ignore-case)$/x and do { $opt{nocase} = 0;           next };
-    /^(       --manpage       )$/x and do { $out = manpage();           next };
+    /^(       --manpage       )$/x and do { $opt{man} = 1;              next };
     /^(-P(.*)|--pager (=(.*))?)$/x and do { $opt{pager} = $2||$4//shift;next };
     /^(       --test          )$/x and do { $opt{test} = 1;             next };
     /^(       --version       )$/x and do { $out = version();           next };
     die "Unknown option '$_'.\n";
 }
 
-# If not piped, use pager.
-open(STDOUT, '|-', $opt{pager})
-    or die "Can't run command '$opt{pager}': $!\n"
-    if -t STDOUT;
+$opt{man}  and manpage();
+$opt{test} and do { say test() ? 'ALL TESTS OK' : 'TESTS FAILED'; exit };
+$out       and do { print $out; exit };
 
-if ($out) {
-    print($out);
-    exit;
-};
-if ($opt{test}) {
-    say test() ? 'ALL TESTS OK' : 'TESTS FAILED';
-    exit;
-};
+# If not piped, use pager.
+# FIXME: split $opt{pager} (?)
+$pager_pid = open(STDOUT, '|-', $opt{pager})
+    or die "Can't exec '$opt{pager}': $!\n"
+    if -t STDOUT;
 
 # FIXME: Parse & use query from command line
 $opt{query} = "@query";
@@ -672,7 +674,7 @@ $opt{query} = "@query";
 #            ||   |
 #my $query = [[], []];
 my $query = [
-    #match_value_regex(qr/bach/i),
+    match_value_regex(qr/zed/i),
     #match_value_regex(qr/said no/i),
 ];
 
@@ -691,13 +693,288 @@ while (my ($prespace, @field) = $zdb->read_record()) {
     }
 }
 
-__DATA__
-INTERNAL QUERY FORMAT
-=====================
+__END__
+
+FIXME: See 'man pod2man' & 'man perlpodstyle' for a list of all sections that
+1should be included in a man page.
+
+=encoding utf8
+
+=head1 NAME
+
+zdb - Manipulate ZDB database
+
+
+=head1 SYNOPSIS
+
+B<zdb> [I<OPTION>]... [B<-->] [[I<QUERY>]... [I<FIELD>B<=>I<VALUE>]...]...
+
+
+=head1 DESCRIPTION
+
+B<zdb> is a utility for searching and manipulating human-readable text-based
+database files in the ZDB format, it is similar to GNU Recutils in intention,
+with the difference that it strives to have a more human-readable query
+language as well. Queries are thus usually short and simple, yet allow for
+complex queries when needed.
+
+B<zdb> operates in four different modes, depending on whether either or both of
+I<QUERY> and I<FIELD>B<=>I<VALUE> have been provided.
+
+=over 2
+
+=item * Only I<QUERY>: Find and show matching records.
+
+=item * Only I<FIELD>B<=>I<VALUE>: Insert given fields as a new record.
+
+=item * Both I<QUERY> and I<FIELD>B<=>I<VALUE>: Insert given fields in matching
+record.
+
+=item * Neither: Display a database summary.
+
+=back
+
+=head1 OPTIONS
+
+=over 7
+
+=item B<--color>[B<=>I<WHEN>], B<--colour>[B<=>I<WHEN>] (default: B<auto>)
+
+Toggle color highlighting of matches. Default is B<auto>. Using the option
+B<--color> without I<WHEN> implies as B<--color=always>. I<WHEN> may be one of:
+
+=over 2
+
+=item * B<always> (alias: B<yes>, B<force>) to enable highlighting.
+
+=item * B<never> (alias: B<no>, B<none>) to disable highlighting.
+1
+=item * B<auto> (alias: B<tty>, B<if-tty>) to enable highlighting only when
+output is connected to a terminal.
+
+=back
+
+See also B<-c> and B<-C>. (Option from B<grep>/B<ls>, but alias forms for
+I<WHEN> are from B<ls>.)
+
+=item B<-c>
+
+Enable highlighting. Short for B<--color=always>.
+
+=item B<-C>
+
+Disable highlighting. Short for B<--color=never>.
+
+=item B<-f>I<FILE>, B<--file=>I<FILE>
+
+Read input from given I<FILE>, without this option, input is read from standard
+input. (TODO: See L</Atomic file updates>; Option from B<grep>.)
+
+=item B<-h>, B<--help>
+
+Output a usage message and exit.
+
+=item B<--help-query>
+
+Display a cheat sheet for the QUERY syntax. (See also L</QUERIES> below).
+
+=item B<-i>, B<--ignore-case> (default)
+
+Ignore case distinctions when searching. (This is the default.) This option is
+useful to override any previously given B<--no-ignore-case> on the same command
+line. (Option from B<grep>.)
+
+=item B<-I>, B<--no-ignore-case>
+
+Consider case distinctions when searching. By default search is
+case-insensitive, use this option to override that. (Option from B<grep>.)
+
+=item B<--manpage>
+
+Display the B<zdb> manpage (as extracted from Perl POD documentation from the
+source). The outputted manpage is fed to B<man>. (TODO: See L</Show manpage
+using B<$MANPAGER>>.)
+
+=item B<-P>I<CMD>, B<--pager=>I<CMD> (default: B<pager>)
+
+Specify which output pager to use. By default, B<pager> is used. The use of
+this option overrides the B<$PAGER> environment variable. (TODO: See L</Support
+arguments for pager>; Option from B<man>/B<bat>/B<delta>.)
+
+=item B<--test>
+
+Run built-in unit tests. (TODO: See L</Use framework for unit tests>.)
+
+=item B<--version>
+
+Output version information and exit.
+
+=back
+
+
+=head1 QUERIES
+
+All the QUERY arguments are joined together before being read by B<zdb>. This
+allows simple queries to written without quotes. Queries are case-insensitive
+by default (unless overridden with B<--no-ignore-case>).
+
+Missing parentheses are automatically added at the start/end of the query.
+Query words only match whole words in the data, to match a partial word use
+C<*>. For example, use C<x*> to match words beginning with "x", or C<*x> for to
+match words ending in "x".
+
+Boolean operators are also supported:
+
+    ┌──────────────────────┐
+    │   Boolean operators  │   From the most tightly binding, to the
+    ├────────┬─────────────┤   least binding.
+    │ NOT    │  -  (minus) │
+    ├────────┼─────────────┤
+    │ AND    │  ␣  (space) │
+    ├────────┼─────────────┤
+    │ OR     │  ,  (comma) │
+    ├────────┼─────────────┤   ¹ Missing parentheses are automatically
+    │ GROUP¹ │ (…) (parens)│     added at the start or end of a query.
+    └────────┴─────────────┘
+
+
+=head2 Field Prefixes
+
+To search only a specific field, use 'I<prefix>B<:>I<value>' (that is,
+B<name:anderson> will search for 'anderson' all 'name' fields). No prefix is
+the same as 'B<*:>'. The prefix syntax actually the same as the value part, so
+stuff like B<(name,alias):anderson> (in 'name' or 'alias' fields, search for
+'anderson') also works! You can also chain the prefixes B<name:magnus:anderson>
+will match entries that that have a 'name' field that contains both 'magnus'
+and 'anderson' (in any order). Just 'name:' (without value) matches entries
+that has a field by that name (ignoring any field value).
+
+Searching is supposed to be simple, and queries fast and easy to write. Enter
+Sloppy Query, the *very forgiving* query language. Did you not balance your
+parentheses? Never mind,
+
+The query language is called 'sloppy query', it is inspired by web search
+engines, and focused on expressing a lot with a little. (ZDB is to a large
+extent inspired by GNU Recutils, but one of the things I didn't like with
+Recutils was its pretty verbose query language.)
+
+
+=head2 Quoting
+
+To search for a literal occurrence of a character mentioned above, put
+character in question in double quotes ('x*' searches for words starting with
+'x', while '"x*"'>
+
+Special characters may be put in double quotes to perform a literal search for
+them. However, quoting in the shell is a little bit tricky, since the shell
+strips quotes. This means that for a quote to be visible to B<zdb> it must be
+quoted twice. The following will find the phrase 'great britain' in any country
+field:
+
+    zdb 'country:"great britain"' <FILE
+
+This next command will instead find all records with a 'country' field
+containing 'great', and any field containing 'britain' (probably B<not> what
+you intended).
+
+    zdb 'country:great britain' <FILE
+
+A third option is using the B<:> operator multiple times. The following command
+will match all 'country' fields that contain both the words 'great' and
+'britain' (in the same field, but regardless of which order the words come in).
+
+    zdb 'country:great:britain' <FILE
+
+Single quotes do not have a special meaning in a QUERY. The following will
+match 'name' fields containing "d'armond":
+
+    zdb "name:d'armond" <FILE
+
+
+=head1 ENVIRONMENT
+
+=over 7
+
+=item B<$PAGER>
+
+If B<$PAGER> is set its value is used as the name of the program used to
+display the manual page. By default, B<pager> is used, falling back to B<cat>
+if B<pager> is not found or is not executable.
+
+The value may be a simple command name or a command with arguments, and may use
+shell quoting (backslashes, single quotes, or double quotes). It may not use
+pipes to connect multiple commands; if you need that, use a wrapper script,
+which may take the file to display either as an argument or on standard input.
+
+=back
+
+
+=head1 AUTHOR
+
+Copyright (C) 1998-2025 zrajm <zrajm@klingonska.org>.
+
+
+=head1 HISTORY
+
+[2025-11-11 00:51-06:50] & [2025-11-11 15:26-21:32, 00:04-02:20] v0.0.1 -
+Primitive initial functionality. Output a ZDB file (given a ZDB file on
+standard input), and split the file into records internally while preserving
+whitespace between records (and at the beginning & ending of file).
+
+[2025-11-11 15:26-16:11, 19:45-21:31] & [2025-11-12 00:04-03:28, 05:02-07:12]
+[2025-11-14 01:03-06:30, 18:10-11:42] v0.1.0 - Defined internal query format,
+and internal data format. File now loads into the new format loading.
+Implemented search (using a simple hardcoded query). Added hiliting of search
+result (including overlapping matches).
+
+[2025-11-14 11:42-12:22] v0.1.1 - Documented internals somewhat.
+
+[2025-11-15 15:33-17:06] v0.2.0 - Added B<--pager> and B<--manpage> options.
+Pager defaults to whatever is specified in the $PAGER environment variable
+(defaulting to B<less>). B<--manpage> option shows simple documentation (not
+yet manpage formatted, but its *something*). Also removed the command line
+options B<--help-internals> and B<--todo> as this info is now part of the
+manpage instead.
+
+[2025-11-16 00:06-04:39], [2025-11-16 23:18-02:27], [2025-11-17 04:29-08:10] &
+[2025-11-17 14:13-17:07] v0.3.0 - Pager now defaults to B<pager> (instead of
+B<less>). Better suppression of pager (or, in the case of B<--manpage>,
+manpager) when there are errors. Extensive rewrite of docs.
+
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2025, zrajm L<zrajm@klingonska.org>. ZDB file format copyright
+1998-2025 by zrajm and Klingonska Akademien in Uppsala, Sweden.
+L<https://klingonska.org>.
+
+License GPLv2: GNU General Public License version 2 or later
+L<https://gnu.org/licenses/gpl-2.0.html>. This is free software: you are free
+to change and redistribute it. There is NO WARRANTY, to the extent permitted by
+law. (See also C<zdb --version>.)
+
+
+=head1 SEE ALSO
+
+B<zdb> is partly inspired by GNU Recutils. -- When I first heard about Recutils
+I was delighted to find that its file format it strikingly similar to the
+plain-text 'database' format I've used for my Klingon dictionary since the very
+end of the last century (see L<https://klingonska.org/dict/dict.zdb>). I was to
+a large degree inspired by the shortcomings of Recutils -- it's query language
+is verbose and pretty inflexible (I felt I could do better!), and Recutils does
+not highlight matches.
+
+Hence, this little project! :)
+
+
+=head1 INTERNALS
+
+=head2 Internal Query Format
+
 Internally query tree structure, consisting is a nested lists, where the leaves
 are functions. These matcher functions are called for each field/value pair,
 and aggregated. When not matching they should return the empty list, and when
-matching they return the field and value pair again, with possible hilites
+matching they return the field and value pair again, with possible highlights
 (achieved using ANSI escape code for inverting '\e7m...\e[27m'). When a matcher
 function is called without arguments, it should return data about itself (exact
 format to be decided) -- this is to allow for creating a cleaned-up version of
@@ -727,8 +1004,8 @@ functions could of course be constructed, maybe something like?
     regex({ name => qr/name/i, value => qr/McGuffin/i })
 
 
-INTERNAL REPRESENTATION DATA
-============================
+=head2 Internal Database Representation
+
 In the main loop `read_record()` is called over and over until the entire file
 has been read. (And the query is used in turn for each record to determine
 whether or not to output it.) `read_record()` returns two values, first is a
@@ -747,49 +1024,164 @@ of supporting other data formats in the future.) Middle value may vary
 depending on the amount of whitespace used between the field name and value.
 
 
-HISTORY
-=======
-[2025-11-11 00:51-06:50] & [2025-11-11 15:26-21:32, 00:04-02:20] v0.0.1 -
-Primitive initial functionality. Output a ZDB file (given a ZDB file on
-standard input), and split the file into records internally while preserving
-whitespace between records (and at the beginning & ending of file).
+=head1 FUTURE
 
-[2025-11-11 15:26-16:11, 19:45-21:31] & [2025-11-12 00:04-03:28, 05:02-07:12]
-[2025-11-14 01:03-06:30, 18:10-11:42] v0.1.0 - Defined internal query format,
-and internal data format. File now loads into the new format loading.
-Implemented search (using a simple hardcoded query). Added hiliting of search
-result (including overlapping matches).
+Below are some planned future features.
 
-[2025-11-14 11:42-12:22] v0.1.1 - Documented internals somewhat.
+=head2 Read QUERY arguments
 
-[2025-11-15 15:33-17:06] v0.2.0 - Added --pager and --manpage options. Pager
-defaults to whatever is specified in the $PAGER environment variable
-(defaulting to Less). --manpage option shows simple documentation (not yet
-manpage formatted, but its *something*). Also removed the command line options
---help-internals and --todo as this info is now part of the manpage instead.
+=head2 Automatic linebreaking
 
+There should maybe be an option to produce automatic linebreaks in fields? How
+about fields containing explicit newlines? (Like an address, or poetry?)
 
-TODO
-====
-* Parse query on command line
-* Sorting
-* Data insertion
-  * Inserting new record (= no QUERY on command line).
-  * Inserting fields into existing record (= QUERY on command line).
-* Atomic file updates
-* Save all diffs made in 'FILE.zdb' dir (or zip archive?)
-* Encryption (pipe input/output through external secure tool)
-  (also, how make THESE diffs secure -- encrypted archive of some kind?)
-* Selection of hilite color
-* Document the internal data structures
-* Add option to resort input (using '%sort' specifications) -- NEVER sort
-  unless explicitly requested
-* Date fields (look at recutils, but also allow YYYY only, or YY-MM etc.) (like
-  'date --iso=...' but also for 'month' and 'year', and also the ones supported
-  by date: 'date', 'hour', 'minute', 'second', 'ns')
-* Verifying fields
-* Deleting records & fields
-* Turn manpage into actual manpage? (and pipe to `man`?)
+=head2 Verify manpage contents
 
-__END__
+Should verify that all manadotry parts of a manpage are included. (See C<man
+perlpodstyle>.)
+
+=head2 Atomic file updates
+
+Currently data is always output to standard output, regardless of whether it
+was read from standard input, or from file specified with the B<--file=>I<FILE>
+option. In the future, input on stdin should result in output to stdout, but
+using B<--file=>I<FILE> should result in the ZDB being atomically updated. A
+tempfile is written (next to the input file, e.g. with the name
+'B<.>I<FILE>B<.tmp>'). Upon successful outputting of this file, is renamed
+to replace the old file.
+
+=head2 Inserting new records
+
+When I<FIELD>B<=>I<VALUE> pairs arguments are given, but no I<QUERY> is present
+on the command line, the data should be inserted as a new record in the
+database.
+
+=head2 Inserting fields into existing records
+
+When I<FIELD>B<=>I<VALUE> pairs arguments are given, and a I<QUERY> is present
+on the command line, the data should be inserted into the first(?) matching as
+record.
+
+=head2 Record and field sorting
+
+Sorting, being a slow operation, should never be performed on the whole
+dictionary unless explicitly requested. (Using a B<--sort> option, perhaps?)
+However, when inserting records or fields, the sort order should be respected,
+and the new record/field should be inserted late as possible in the record set
+or record.
+
+B<Record sort:> In B<recutils> the B<%sort> option is used to define how
+records are sorted relative to each other in a record set. For example,
+B<recutils> uses B<S<%sort: author year>> to specify should be sorted primarily
+by the content of the B<author> field, and secondarily by B<year>.
+
+B<Field sort:> B<recutils> has no way of sorting fields within a record. So
+will have to be invented here. Sorting should be stable, so that if there are
+interleaved fields of different names, the internal order between fields of the
+same name should be retained (but the different field names should no longer be
+interleaved) after sorting.
+
+=head2 Field types and field verification
+
+B<recutils> uses B<%type> and B<%typedef> for this purpose. Also the fields
+B<%mandatory>, B<%allowed>, B<%prohibit>, B<%unique> and B<%constraint>. In
+normal operation B<zdb> should give an error if user tries to add (or remove)
+records or fields that break what's allowed. A B<--force> option should allow
+one to make breaking changes. But verification of whole database might be too
+slow to perform for each modification. (Maybe add B<--verify> option or
+similar for checking the whole database?)
+
+=head2 Support arguments for pager
+
+The B<--pager=>I<CMD> option and B<$PAGER> environment variable should both
+allow for arguments being used. (The B<bat --help> gives an example B<--pager>
+use as '--pager "less -RF"'.) Currently using a space in either B<$PAGER> or
+B<--pager=>I<CMD> will most likely cause an error. (See B<--pager> in man(1),
+and B<bat --help>.)
+
+=head2 Add option B<--paging>[B<=>I<WHEN>]
+
+Both B<bat> and B<delta> have this option. Should work exactly like
+B<--color>[B<=>I<WHEN>], but determine when the pager will be used.
+
+=head2 Show manpage using B<$MANPAGER>
+
+The B<--manpage> option should use the B<$MANPAGER> environment variable to
+determine how do display its manpage.
+
+=head2 Use framework for unit tests
+
+The unit tests run with B<--test> option are pretty primitive. They should be
+rewritten to run using some standard Perl test framework (like C<Test::Simple>,
+C<Test::More>). Maybe also the Perl Modulino pattern as well? B<NOTE:> Any
+testing framework modules should B<only> be loaded when running tests, never
+during normal execution.
+
+=head2 Add record sets B<%rec> (and B<%doc>)
+
+Implement B<recutils> 'record set' field B<%rec>. Record set name should
+probably use the same limitations (and recommendations) as B<recutils> do (see
+'Naming Record Types' in the B<recutils> manual).
+
+=head2 Status command
+
+Giving an input file, but no I<QUERY> or I<FIELD>B<=>I<VALUE> pairs should give
+a summary of the input file. Summary should include B<%rec> and B<%doc> fields
+for each record set, and there should also be a summary of the fields usage
+used for each set. For example we could see something like the following to
+indicate that the field 'tlh' occurs once in 3033 records, while the field
+'cite' occurs zero times in 2627 records, once in 320 records etc.
+
+    %rec	words
+    %doc	Klingonska Akademien's Klingon Dictionary
+    tlh		1 -- 1:3033
+    ...
+    cite	0..5,7 -- 0:2627 1:320 2:58 3:18 4:4 5:4 7:3
+    ...
+
+Should also have a look at what the B<recinf> command outputs for additional
+inspiration.
+
+=head2 File locking
+
+There should be some protection to avoid having multiple instances of B<zdb>
+trying to modify the same file at the same time.
+
+=head2 Highlight color config
+
+User should be able to choose highlight color.
+
+=head2 Undo
+
+As a database is updated, patches should be generated and saved into a
+directory next to the database. (Similar to how tempfiles are stored.) So,
+maybe create a directory 'B<.>I<FILE>B<.undo>' (or 'B<.>I<FILE>B<.diff>') and
+then, inside that directory create patches called
+I<YYYYMMDDB<_>HHMMSS>B<.diff>. This way, any of the patches can be reapplied to
+undo that change.---Or, possibly, diffs could instead be added to a B<.zip>
+file (or other archive).
+
+=head2 Encryption
+
+(Pipe input/output through external secure tool) (also, how make THESE diffs
+secure -- encrypted archive of some kind?).
+
+=head2 Add date fields
+
+Date fields should allow for the kind of date available in B<recutils>, but
+also allow for simple YYYY only, or YYYY-MM etc. (Like 'date --iso=...' but
+also for 'month' and 'year', and also the ones supported by date: 'date',
+'hour', 'minute', 'second', 'ns')
+
+=head2 Deleting records & fields
+
+Add options for deleting records and fields. For example, add a
+B<--delete-record> option which deletes all records matched by QUERY, and a
+B<--delete-field> which deletes all fields matched by query (though the option
+names should probably be shorter). Or maybe use some other scheme? (Like using
+I<FIELD>B<=>I<VALUE> pairs with empty value to remove a field---though that
+might be better reserved for setting a field, but leaving it empty.)
+
+=cut
+
 #[eof]
