@@ -22,7 +22,7 @@ END {
 }
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.3.0';                          # https://semver.org/
+our $VERSION='0.3.1';                          # https://semver.org/
 our $VERSION_DATE='17 November 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -186,62 +186,66 @@ sub manpage {
 #            END_RECORD
 sub test {
     sub x { my ($x) = @_; return $x }
-    !any(\&x, [])           or die "any => []";                # OR mode (default).
-     any(\&x, [1])          or die "any => [1]";
-    !any(\&x, [0, 0])       or die "any => [0, 0]";
-     any(\&x, [0, 1])       or die "any => [0, 1]";
-     any(\&x, [1, 0])       or die "any => [1, 0]";
-     any(\&x, [1, 1])       or die "any => [1, 1]";
-    !any(\&x, [0, 0, 0])    or die "any => [0, 0, 0]";
-     any(\&x, [0, 0, 1])    or die "any => [0, 0, 1]";
-     any(\&x, [0, 1, 0])    or die "any => [0, 1, 0]";
-     any(\&x, [0, 1, 1])    or die "any => [0, 1, 1]";
-     any(\&x, [1, 0, 0])    or die "any => [1, 0, 0]";
-     any(\&x, [1, 0, 1])    or die "any => [1, 0, 1]";
-     any(\&x, [1, 1, 0])    or die "any => [1, 1, 0]";
-     any(\&x, [1, 1, 1])    or die "any => [1, 1, 1]";
-     all(\&x, [])           or die "all => []";                # AND mode.
-     all(\&x, [1])          or die "all => [1]";
-    !all(\&x, [0, 0])       or die "all => [0, 0]";
-    !all(\&x, [0, 1])       or die "all => [0, 1]";
-    !all(\&x, [1, 0])       or die "all => [1, 0]";
-     all(\&x, [1, 1])       or die "all => [1, 1]";
-    !all(\&x, [0, 0, 0])    or die "all => [0, 0, 0]";
-    !all(\&x, [0, 0, 1])    or die "all => [0, 0, 1]";
-    !all(\&x, [0, 1, 0])    or die "all => [0, 1, 0]";
-    !all(\&x, [0, 1, 1])    or die "all => [0, 1, 1]";
-    !all(\&x, [1, 0, 0])    or die "all => [1, 0, 0]";
-    !all(\&x, [1, 0, 1])    or die "all => [1, 0, 1]";
-    !all(\&x, [1, 1, 0])    or die "all => [1, 1, 0]";
-     all(\&x, [1, 1, 1])    or die "all => [1, 1, 1]";
-    !recurse(\&x, [])           or die "recurse => []";        # OR mode (default).
-     recurse(\&x, [1])          or die "recurse => [1]";
-    !recurse(\&x, [0, 0])       or die "recurse => [0, 0]";
-     recurse(\&x, [0, 1])       or die "recurse => [0, 1]";
-     recurse(\&x, [1, 0])       or die "recurse => [1, 0]";
-     recurse(\&x, [1, 1])       or die "recurse => [1, 1]";
-    !recurse(\&x, [0, 0, 0])    or die "recurse => [0, 0, 0]";
-     recurse(\&x, [0, 0, 1])    or die "recurse => [0, 0, 1]";
-     recurse(\&x, [0, 1, 0])    or die "recurse => [0, 1, 0]";
-     recurse(\&x, [0, 1, 1])    or die "recurse => [0, 1, 1]";
-     recurse(\&x, [1, 0, 0])    or die "recurse => [1, 0, 0]";
-     recurse(\&x, [1, 0, 1])    or die "recurse => [1, 0, 1]";
-     recurse(\&x, [1, 1, 0])    or die "recurse => [1, 1, 0]";
-     recurse(\&x, [1, 1, 1])    or die "recurse => [1, 1, 1]";
-     recurse(\&x, [], 1)        or die "recurse => []";        # AND mode.
-     recurse(\&x, [1], 1)       or die "recurse => [1]";
-    !recurse(\&x, [0, 0], 1)    or die "recurse => [0, 0]";
-    !recurse(\&x, [0, 1], 1)    or die "recurse => [0, 1]";
-    !recurse(\&x, [1, 0], 1)    or die "recurse => [1, 0]";
-     recurse(\&x, [1, 1], 1)    or die "recurse => [1, 1]";
-    !recurse(\&x, [0, 0, 0], 1) or die "recurse => [0, 0, 0]";
-    !recurse(\&x, [0, 0, 1], 1) or die "recurse => [0, 0, 1]";
-    !recurse(\&x, [0, 1, 0], 1) or die "recurse => [0, 1, 0]";
-    !recurse(\&x, [0, 1, 1], 1) or die "recurse => [0, 1, 1]";
-    !recurse(\&x, [1, 0, 0], 1) or die "recurse => [1, 0, 0]";
-    !recurse(\&x, [1, 0, 1], 1) or die "recurse => [1, 0, 1]";
-    !recurse(\&x, [1, 1, 0], 1) or die "recurse => [1, 1, 0]";
-     recurse(\&x, [1, 1, 1], 1) or die "recurse => [1, 1, 1]";
+    # OR mode (default).
+    !Query::any(\&x, [])           or die "Query::any => []";
+     Query::any(\&x, [1])          or die "Query::any => [1]";
+    !Query::any(\&x, [0, 0])       or die "Query::any => [0, 0]";
+     Query::any(\&x, [0, 1])       or die "Query::any => [0, 1]";
+     Query::any(\&x, [1, 0])       or die "Query::any => [1, 0]";
+     Query::any(\&x, [1, 1])       or die "Query::any => [1, 1]";
+    !Query::any(\&x, [0, 0, 0])    or die "Query::any => [0, 0, 0]";
+     Query::any(\&x, [0, 0, 1])    or die "Query::any => [0, 0, 1]";
+     Query::any(\&x, [0, 1, 0])    or die "Query::any => [0, 1, 0]";
+     Query::any(\&x, [0, 1, 1])    or die "Query::any => [0, 1, 1]";
+     Query::any(\&x, [1, 0, 0])    or die "Query::any => [1, 0, 0]";
+     Query::any(\&x, [1, 0, 1])    or die "Query::any => [1, 0, 1]";
+     Query::any(\&x, [1, 1, 0])    or die "Query::any => [1, 1, 0]";
+     Query::any(\&x, [1, 1, 1])    or die "Query::any => [1, 1, 1]";
+    # AND mode.
+     Query::all(\&x, [])           or die "Query::all => []";
+     Query::all(\&x, [1])          or die "Query::all => [1]";
+    !Query::all(\&x, [0, 0])       or die "Query::all => [0, 0]";
+    !Query::all(\&x, [0, 1])       or die "Query::all => [0, 1]";
+    !Query::all(\&x, [1, 0])       or die "Query::all => [1, 0]";
+     Query::all(\&x, [1, 1])       or die "Query::all => [1, 1]";
+    !Query::all(\&x, [0, 0, 0])    or die "Query::all => [0, 0, 0]";
+    !Query::all(\&x, [0, 0, 1])    or die "Query::all => [0, 0, 1]";
+    !Query::all(\&x, [0, 1, 0])    or die "Query::all => [0, 1, 0]";
+    !Query::all(\&x, [0, 1, 1])    or die "Query::all => [0, 1, 1]";
+    !Query::all(\&x, [1, 0, 0])    or die "Query::all => [1, 0, 0]";
+    !Query::all(\&x, [1, 0, 1])    or die "Query::all => [1, 0, 1]";
+    !Query::all(\&x, [1, 1, 0])    or die "Query::all => [1, 1, 0]";
+     Query::all(\&x, [1, 1, 1])    or die "Query::all => [1, 1, 1]";
+    # OR mode (default).
+    !Query::recurse(\&x, [])           or die "Query::recurse => []";
+     Query::recurse(\&x, [1])          or die "Query::recurse => [1]";
+    !Query::recurse(\&x, [0, 0])       or die "Query::recurse => [0, 0]";
+     Query::recurse(\&x, [0, 1])       or die "Query::recurse => [0, 1]";
+     Query::recurse(\&x, [1, 0])       or die "Query::recurse => [1, 0]";
+     Query::recurse(\&x, [1, 1])       or die "Query::recurse => [1, 1]";
+    !Query::recurse(\&x, [0, 0, 0])    or die "Query::recurse => [0, 0, 0]";
+     Query::recurse(\&x, [0, 0, 1])    or die "Query::recurse => [0, 0, 1]";
+     Query::recurse(\&x, [0, 1, 0])    or die "Query::recurse => [0, 1, 0]";
+     Query::recurse(\&x, [0, 1, 1])    or die "Query::recurse => [0, 1, 1]";
+     Query::recurse(\&x, [1, 0, 0])    or die "Query::recurse => [1, 0, 0]";
+     Query::recurse(\&x, [1, 0, 1])    or die "Query::recurse => [1, 0, 1]";
+     Query::recurse(\&x, [1, 1, 0])    or die "Query::recurse => [1, 1, 0]";
+     Query::recurse(\&x, [1, 1, 1])    or die "Query::recurse => [1, 1, 1]";
+    # AND mode.
+     Query::recurse(\&x, [], 1)        or die "Query::recurse => []";
+     Query::recurse(\&x, [1], 1)       or die "Query::recurse => [1]";
+    !Query::recurse(\&x, [0, 0], 1)    or die "Query::recurse => [0, 0]";
+    !Query::recurse(\&x, [0, 1], 1)    or die "Query::recurse => [0, 1]";
+    !Query::recurse(\&x, [1, 0], 1)    or die "Query::recurse => [1, 0]";
+     Query::recurse(\&x, [1, 1], 1)    or die "Query::recurse => [1, 1]";
+    !Query::recurse(\&x, [0, 0, 0], 1) or die "Query::recurse => [0, 0, 0]";
+    !Query::recurse(\&x, [0, 0, 1], 1) or die "Query::recurse => [0, 0, 1]";
+    !Query::recurse(\&x, [0, 1, 0], 1) or die "Query::recurse => [0, 1, 0]";
+    !Query::recurse(\&x, [0, 1, 1], 1) or die "Query::recurse => [0, 1, 1]";
+    !Query::recurse(\&x, [1, 0, 0], 1) or die "Query::recurse => [1, 0, 0]";
+    !Query::recurse(\&x, [1, 0, 1], 1) or die "Query::recurse => [1, 0, 1]";
+    !Query::recurse(\&x, [1, 1, 0], 1) or die "Query::recurse => [1, 1, 0]";
+     Query::recurse(\&x, [1, 1, 1], 1) or die "Query::recurse => [1, 1, 1]";
 }
 
 ###############################################################################
@@ -292,6 +296,8 @@ sub record {
     }
     return \@record;
 }
+
+###############################################################################
 
 # FIXME: Be smarter. Don't load entire file into memory in constructor.
 # Also, maybe don't hardcode record and field separators?
@@ -360,168 +366,128 @@ sub record {
 
 ###############################################################################
 
-# FIXME: turn this into module?
+{
+    package Query;
+    #            or
+    #            |and and
+    #            ||   |
+    #my $query = [[], []];
+    sub new {
+        my ($class, $query_str) = @_;
 
-# Returns a matcher function. Matcher function takes two args ($field name &
-# $value) and returns true/false. If called without args it returns a structure
-# to describe itself.
-sub match_value_regex {
-    my ($regex) = @_;
-    my ($INVERT, $UNINVERT) = ("\e[7m", "\e[27m");
-    return sub {
-        my ($field, $value) = @_ or return {
-            # structure describing ourself
-            type  => 'regex',
-            match => 'value',
-            regex => $regex,
-        };
-        #return $value =~ $regex;  # simple true/false
-        return $value =~ s#$regex#$INVERT$&$UNINVERT#g
-            ? ($field, $value) : ();
-    };
-}
-
-# Test all elements in $array by invoking callback (passing the element as
-# arg). If third argument is provided and is truthy, it'll operate in AND (or
-# all) mode, without it OR (or any) mode is used
-my $VERBOSE_RECURSE = 0;
-sub recurse { # $and: true = AND/all / false = OR/any
-    my ($func, $array, $and) = @_;
-    say('  ' . ($and ? 'AND' : 'OR')) if $VERBOSE_RECURSE;
-    my $match = $and;
-    for (@$array) {
-        $match = !$and if $func->($_) xor $and;
+        # FIXME: actually parse query
+        my $query = [
+            match_value_regex(qr/zed/i),
+            #match_value_regex(qr/said no/i),
+        ];
+        my $self = { query => $query };
+        return bless($self, $class);
     }
-    return $match;
-}
-sub any {
-    my ($func, $list) = @_;
-    for (@$list) { return 1 if $func->($_) }
-    return ();
-}
-sub all {
-    my ($func, $list) = @_;
-    for (@$list) { return () unless $func->($_) }
-    return 1;
-}
 
-# FIXME: Be smarter about short-circuiting (it can be done when no highlight is
-# needed, e.g. on a negative match, or when highlight is off).
-#
-# SHORTCUTTING: version (will only highlight first match).
-# sub recurse { # $and: true = AND/all / false = OR/any
-#     my ($func, $array, $and) = @_;
-#     say('  ' . ($and ? 'AND' : 'OR')) if $VERBOSE_RECURSE;
-#     for (@$array) {
-#         return !$and if $func->($_) xor $and;
-#     }
-#     return $and;
-# }
+    # Returns a matcher function. Matcher function takes two args ($field name &
+    # $value) and returns true/false. If called without args it returns a structure
+    # to describe itself.
+    sub match_value_regex {
+        my ($regex) = @_;
+        my ($INVERT, $UNINVERT) = ("\e[7m", "\e[27m");
+        return sub {
+            my ($field, $value) = @_ or return {
+                # structure describing ourself
+                type  => 'regex',
+                match => 'value',
+                regex => $regex,
+            };
+            #return $value =~ $regex;  # simple true/false
+            return $value =~ s#$regex#$INVERT$&$UNINVERT#g
+                ? ($field, $value) : ();
+        };
+    }
 
-sub match {
-    my ($query, $record, $lvl) = @_;
-    $lvl //= 0;                                # even = AND, odd = OR
+    # Test all elements in $array by invoking callback (passing the element as
+    # arg). If third argument is provided and is truthy, it'll operate in AND
+    # (or all) mode, without it OR (or any) mode is used
+    my $VERBOSE_RECURSE = 0;
+    sub recurse {                       # $and: true = AND/all / false = OR/any
+        my ($func, $array, $and) = @_;
+        say('  ' . ($and ? 'AND' : 'OR')) if $VERBOSE_RECURSE;
+        my $match = $and;
+        for (@$array) {
+            $match = !$and if $func->($_) xor $and;
+        }
+        return $match;
+    }
+    sub any {
+        my ($func, $list) = @_;
+        for (@$list) { return 1 if $func->($_) }
+        return ();
+    }
+    sub all {
+        my ($func, $list) = @_;
+        for (@$list) { return () unless $func->($_) }
+        return 1;
+    }
 
-    # Subquery.
-    if (ref($query) eq 'ARRAY') {
-        my $match = recurse(
-            sub {
-                my ($subquery) = @_;
-                return match($subquery, $record, !$lvl);
-            },
-            $query,
-            $lvl % 2,
-        );
+    # FIXME: Be smarter about short-circuiting (it can be done when no
+    # highlight is needed, e.g. on a negative match, or when highlight is off).
+    #
+    # SHORTCUTTING: version (will only highlight first match).
+    # sub recurse { # $and: true = AND/all / false = OR/any
+    #     my ($func, $array, $and) = @_;
+    #     say('  ' . ($and ? 'AND' : 'OR')) if $VERBOSE_RECURSE;
+    #     for (@$array) {
+    #         return !$and if $func->($_) xor $and;
+    #     }
+    #     return $and;
+    # }
+
+    sub match {
+        my ($self, $record, $lvl) = @_;
+        return _match($self->{query}, $record);
+    }
+
+    sub _match {
+        my ($query, $record, $lvl) = @_;
+        $lvl //= 0;                            # even = AND, odd = OR
+
+        # Subquery.
+        if (ref($query) eq 'ARRAY') {
+            my $match = recurse(
+                sub {
+                    my ($subquery) = @_;
+                    return _match($subquery, $record, !$lvl);
+                },
+                $query,
+                $lvl % 2,
+            );
+            return $match ? $record : '';
+        }
+
+        die "Error in query" unless ref($query) eq 'CODE';
+
+        my $match = 0;
+        for my $field (@$record) {
+            my ($name, $value) = ($field->{field}, $field->{value});
+
+            #say "----------------------------------------";
+            my ($pre, $sep, $post) = @{ $field->{space} };
+            # say "READ: << '" . quotefunny("$pre$name$sep$value$post") . "'";
+            # print "PROC: ", stringify_hashref($query->());
+
+            my @hilited = $query->($name, $value);
+            if (@hilited) {
+                # Insert hilited values into record.
+                my ($name2, $value2) = @hilited;
+                push(@{$field->{field_hilite}}, $name2)  if $name2  ne $name;
+                push(@{$field->{value_hilite}}, $value2) if $value2 ne $value;
+
+                #($name, $value) = @hilited;
+                #print "('$name', '$value') matches " . Dumper($query->());
+                $match = 1;
+            }
+        }
         return $match ? $record : '';
     }
-
-    die "Error in query" unless ref($query) eq 'CODE';
-
-    my $match = 0;
-    for my $field (@$record) {
-        my ($name, $value) = ($field->{field}, $field->{value});
-
-        #say "----------------------------------------";
-        my ($pre, $sep, $post) = @{ $field->{space} };
-        # say "READ: << '" . quotefunny("$pre$name$sep$value$post") . "'";
-        # print "PROC: ", stringify_hashref($query->());
-
-        my @hilited = $query->($name, $value);
-        if (@hilited) {
-            # Insert hilited values into record.
-            my ($name2, $value2) = @hilited;
-            push(@{$field->{field_hilite}}, $name2)  if $name2  ne $name;
-            push(@{$field->{value_hilite}}, $value2) if $value2 ne $value;
-
-            #($name, $value) = @hilited;
-            #print "('$name', '$value') matches " . Dumper($query->());
-            $match = 1;
-        }
-    }
-    return $match ? $record : '';
 }
-
-# {
-#     package Query;
-
-#     sub new {
-#         my ($class, $query_str) = @_;
-#         #            or
-#         #            |and
-#         #            ||
-#         my $query => [[\&TRUE]];
-
-#         my $self = { query => $query };
-#         return bless($self, $class);
-#     }
-
-#     sub TRUE {
-#         my ($field, $value) = @_;
-#         say 'TRUE';
-#         return 1;
-#     }
-
-#     sub match {
-#         my ($self, $record) = @_;
-#         return _match($self->{query}, $record, 0);
-#     }
-
-#     sub _any {
-#         my ($func, $list) = @_;
-#         for (@$list) { return 1 if $func->($_) }
-#         return ();
-#     }
-#     sub _all {
-#         my ($func, $list) = @_;
-#         for (@$list) { return () unless $func->($_) }
-#         return 1;
-#     }
-
-#     sub _match {
-#         my ($query, $record, $and) = @_;  # true = and / false = or
-
-#         sub recurse { _match(shift(), $record, $and ^ 1) }
-
-#         if (ref($query) eq 'ARRAY') {          # subquery
-#             return $and
-#                 ? _all(\&recurse, $query)
-#                 : _any(\&recurse, $query);
-#         }
-#         die "Error in query" if ref($query) ne 'HASH';
-
-#         # Base case.
-#         while (my ($pre, $name, $sep, $value, $post) = $record->get_field()) {
-
-
-
-
-#         }
-#         return 'xxxx';
-
-#         match(x, $record, 1)
-#     }
-# }
-
 
 # Merges strings with ANSI background highlight. All strings must be identical
 # except for their ANSI markup. Background color, bold, dim & bold/dim reset,
@@ -662,25 +628,11 @@ $pager_pid = open(STDOUT, '|-', $opt{pager})
     or die "Can't exec '$opt{pager}': $!\n"
     if -t STDOUT;
 
-# FIXME: Parse & use query from command line
-$opt{query} = "@query";
-
-#@query = map { qr/$_/ } @query;
-
-#my $query = new Query("@query");
-
-#            or
-#            |and and
-#            ||   |
-#my $query = [[], []];
-my $query = [
-    match_value_regex(qr/zed/i),
-    #match_value_regex(qr/said no/i),
-];
-
 my $zdb = new ZDB($opt{file});
+my $query = new Query("@query");
 while (my ($prespace, @field) = $zdb->read_record()) {
-    match($query, \@field) or next;
+
+    $query->match(\@field) or next;
 
     # FIXME: Don't waste time generating hilite if --color=never.
     print $prespace;
@@ -940,6 +892,9 @@ manpage instead.
 [2025-11-17 14:13-17:07] v0.3.0 - Pager now defaults to B<pager> (instead of
 B<less>). Better suppression of pager (or, in the case of B<--manpage>,
 manpager) when there are errors. Extensive rewrite of docs.
+
+[2025-11-17, 18:53-19:23] v0.3.1 - Moved query parsing and matching into Query
+module.
 
 
 =head1 COPYRIGHT AND LICENSE
