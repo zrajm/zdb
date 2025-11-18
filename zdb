@@ -22,8 +22,8 @@ END {
 }
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.3.1';                          # https://semver.org/
-our $VERSION_DATE='17 November 2025';
+our $VERSION='0.3.2';                          # https://semver.org/
+our $VERSION_DATE='18 November 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -376,10 +376,9 @@ sub record {
         my ($class, $query_str) = @_;
 
         # FIXME: actually parse query
-        my $query = [
-            match_value_regex(qr/zed/i),
-            #match_value_regex(qr/said no/i),
-        ];
+        my $query = [[
+            map { match_value_regex(qr/\b$_\b/i) } split(/\s+/, $query_str)
+        ]];
         my $self = { query => $query };
         return bless($self, $class);
     }
@@ -628,8 +627,8 @@ $pager_pid = open(STDOUT, '|-', $opt{pager})
     or die "Can't exec '$opt{pager}': $!\n"
     if -t STDOUT;
 
-my $zdb = new ZDB($opt{file});
 my $query = new Query("@query");
+my $zdb = new ZDB($opt{file});
 while (my ($prespace, @field) = $zdb->read_record()) {
 
     $query->match(\@field) or next;
@@ -896,6 +895,10 @@ manpager) when there are errors. Extensive rewrite of docs.
 [2025-11-17, 18:53-19:23] v0.3.1 - Moved query parsing and matching into Query
 module.
 
+[2025-11-18 19:26-19:39] v0.3.2 - Now gets QUERY from command line arguments.
+Very basic, all arguments a simply AND:ed, and each pattern is expected to
+match a whole word (with no wildcards or anything).
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -984,6 +987,11 @@ depending on the amount of whitespace used between the field name and value.
 Below are some planned future features.
 
 =head2 Read QUERY arguments
+
+=head2 Search in comments
+
+Option to enable/disable searching comment. By default comments should not be
+searched.
 
 =head2 Automatic linebreaking
 
