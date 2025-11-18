@@ -22,7 +22,7 @@ END {
 }
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.3.3';                          # https://semver.org/
+our $VERSION='0.3.4';                          # https://semver.org/
 our $VERSION_DATE='18 November 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -765,10 +765,12 @@ pager, and the standard output of the pager takes the place of B<zdb>'s
 standard output. (Meaning that if a user pipes the output of B<zdb>, that pipe
 will also pass through the pager, if it is enabled.)
 
-By default B<pager> (which is often set to B<less> by our Linux distro) is
-used. This option overrides any pager specification given in the B<$PAGER>
-environment variable. (TODO: See L</Support arguments for pager>; Option from
-B<man>/B<bat>/B<delta>.)
+By default B<pager> is used (this is set to B<less> by many Linux distros). The
+B<--pager> option overrides any B<$PAGER> environment variable setting. (See
+also B<$PAGER>; Option from B<man>/B<bat>/B<delta>.)
+
+Recommended setting: C<less -F> (this tells B<less> to exit immediately if the
+entirety of the output is one screenful or less).
 
 =item B<--paging>[B<=>I<WHEN>] (default: B<auto>)
 
@@ -883,14 +885,16 @@ match 'name' fields containing "d'armond":
 
 =item B<$PAGER>
 
-If B<$PAGER> is set its value is used as the name of the program used to
-display the manual page. By default, B<pager> is used, falling back to B<cat>
-if B<pager> is not found or is not executable.
+If set this defines the command to be used as a pager for the output (see
+B<--pager>, which can be used to override B<$PAGER> environment variable). By
+default B<pager> is used (this is set to B<less> by many Linux distros).
 
-The value may be a simple command name or a command with arguments, and may use
-shell quoting (backslashes, single quotes, or double quotes). It may not use
-pipes to connect multiple commands; if you need that, use a wrapper script,
-which may take the file to display either as an argument or on standard input.
+The content of page may be any command or pipeline of commands. (Though using a
+pipeline here is inadvisable, as some other commands (for example B<man>) which
+also makes use of the B<$PAGER> environment variable do not support it.
+
+Recommended setting: C<less -F> (this tells B<less> to exit immediately if the
+entirety of the output is one screenful or less).
 
 =back
 
@@ -935,6 +939,10 @@ Very basic, all arguments a simply AND:ed, and each pattern is expected to
 match a whole word (with no wildcards or anything).
 
 [2025-11-18 19:39-21:21] v0.3.3 - Added B<--paging> option.
+
+[2025-11-18 21:21-21:42] v0.3.4 - Tested/verified and documented the B<$PAGER>
+and B<--pager=>I<CMD> capabilities. (Yes, Perl allow more complex commands to
+be used.)
 
 
 =head1 COPYRIGHT AND LICENSE
@@ -1025,6 +1033,11 @@ Below are some planned future features.
 
 =head2 Read QUERY arguments
 
+=head2 Add B<$ZDBPAGER> environment variable
+
+An environment variable to override B<$PAGER>, but, which in turn, can be
+overridden by the B<--pager=>I<CMD> argument.
+
 =head2 Search in comments
 
 Option to enable/disable searching comment. By default comments should not be
@@ -1090,14 +1103,6 @@ records or fields that break what's allowed. A B<--force> option should allow
 one to make breaking changes. But verification of whole database might be too
 slow to perform for each modification. (Maybe add B<--verify> option or
 similar for checking the whole database?)
-
-=head2 Support arguments for pager
-
-The B<--pager=>I<CMD> option and B<$PAGER> environment variable should both
-allow for arguments being used. (The B<bat --help> gives an example B<--pager>
-use as '--pager "less -RF"'.) Currently using a space in either B<$PAGER> or
-B<--pager=>I<CMD> will most likely cause an error. (See B<--pager> in man(1),
-and B<bat --help>.)
 
 =head2 Suppression of length output
 
