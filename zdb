@@ -22,7 +22,7 @@ END {
 }
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.3.2';                          # https://semver.org/
+our $VERSION='0.3.3';                          # https://semver.org/
 our $VERSION_DATE='18 November 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -30,23 +30,26 @@ our $USAGE = <<"USAGE_END";
 Usage: $PROGRAM [OPTION]... [--] [[%TYPE] [QUERY]... [FIELD=VALUE]...]...
 Manipulate ZDB database.
 
-      --color[=WHEN]      Highlight matching strings
-                          WHEN = 'auto' (default), 'always' or 'never'
-  -c                      Highlight even when piped (--color=always)
-  -C                      Disable highlighting (--color=never)
-  -f, --file=FILE         Specify input file
+      --color[=WHEN]      When to highlight matches (default: 'auto')
+                          WHEN: 'auto', 'always' or 'never'
+  -c                      Always highlight matches (--color=always)
+  -C                      Never highlight matches (--color=never)
+  -f, --file=FILE         Specify ZDB input file
   -h, --help              Show this help and exit
       --help-query        Show QUERY syntax (it's very googlish)
   -i, --ignore-case       Ignore case when searching (default)
   -I, --no-ignore-case    Don't ignore case when searching
       --manpage           Show zdb manpage
-  -P, --pager=CMD         Use CMD to show output (default: 'pager')
+      --pager=CMD         Use CMD as pager (default: 'pager')
+      --paging[=WHEN]     When to use pager (default: 'auto')
+  -p                      Always use pager (--paging=always)
+  -P                      Never use pager (--paging=never)
       --test              Run built-in unit tests
       --version           Show version and exit
 
 QUERY arguments are joined (with space) before being parsed. If FIELD=VALUE
-pairs are given (and no QUERY), create new record those fields; if QUERY is
-given fields are added to the first matching record.
+pairs are given (with no QUERY), create new record containing those fields; if
+QUERY is given, add the fields to the first matching record.
 
 ZDB always make minimal changes to files. Comments and whitespace are
 preserved, and resorting is only done on request.
@@ -551,7 +554,7 @@ sub merge_ansi {
 
 ###############################################################################
 
-sub colorarg {
+sub whenarg {
     my ($arg) = @_;
     my $opt = do {
         local $_ = $arg // $ARGV[0] // '';
@@ -593,6 +596,7 @@ my %opt = (
     man    => '',
     nocase => 1,
     pager  => $ENV{PAGER} // 'pager',
+    paging => -t STDOUT,
     test   => 0,
 );
 @ARGV = map { decode } @ARGV;
@@ -604,14 +608,17 @@ while (@ARGV) {
     /^        --               $/x and do { push(@query, @ARGV);        last };
     /^ -c                      $/x and do { $opt{color} = 1;            next };
     /^ -C                      $/x and do { $opt{color} = 0;            next };
-    /^        --colou?r(=(.*))?$/x and do { $opt{color} = colorarg($2); next };
+    /^        --colou?r(=(.*))?$/x and do { $opt{color} = whenarg($2);  next };
     /^(-f(.*)|--file  (=(.*))?)$/x and do { $opt{file} = $2||$4//shift; next };
     /^(-h    |--help          )$/x and do { $out = $USAGE;              next };
     /^(       --help-query    )$/x and do { $out = $QUERY;              next };
     /^(-i    |--ignore-case   )$/x and do { $opt{nocase} = 1;           next };
     /^(-I    |--no-ignore-case)$/x and do { $opt{nocase} = 0;           next };
     /^(       --manpage       )$/x and do { $opt{man} = 1;              next };
-    /^(-P(.*)|--pager (=(.*))?)$/x and do { $opt{pager} = $2||$4//shift;next };
+    /^        --pager  (=(.*))?$/x and do { $opt{pager} = $2//shift;    next };
+    /^        --paging (=(.*))?$/x and do { $opt{paging} = whenarg($2); next };
+    /^ -p                      $/x and do { $opt{paging} = 1;           next };
+    /^ -P                      $/x and do { $opt{paging} = 0;           next };
     /^(       --test          )$/x and do { $opt{test} = 1;             next };
     /^(       --version       )$/x and do { $out = version();           next };
     die "Unknown option '$_'.\n";
@@ -621,11 +628,10 @@ $opt{man}  and manpage();
 $opt{test} and do { say test() ? 'ALL TESTS OK' : 'TESTS FAILED'; exit };
 $out       and do { print $out; exit };
 
-# If not piped, use pager.
 # FIXME: split $opt{pager} (?)
-$pager_pid = open(STDOUT, '|-', $opt{pager})
-    or die "Can't exec '$opt{pager}': $!\n"
-    if -t STDOUT;
+$pager_pid = open(STDOUT, '|-', $opt{pager})   # send all STDOUT through pager
+    or die "Can't exec '$opt{pager}': $!\n"    #   (if enabled)
+    if $opt{paging};
 
 my $query = new Query("@query");
 my $zdb = new ZDB($opt{file});
@@ -647,7 +653,7 @@ while (my ($prespace, @field) = $zdb->read_record()) {
 __END__
 
 FIXME: See 'man pod2man' & 'man perlpodstyle' for a list of all sections that
-1should be included in a man page.
+should be included in a man page.
 
 =encoding utf8
 
@@ -691,22 +697,26 @@ record.
 
 =item B<--color>[B<=>I<WHEN>], B<--colour>[B<=>I<WHEN>] (default: B<auto>)
 
-Toggle color highlighting of matches. Default is B<auto>. Using the option
-B<--color> without I<WHEN> implies as B<--color=always>. I<WHEN> may be one of:
+Whether to highlight search matches in the output.
+
+I<WHEN> may be one of the following (B<--paging> works the same):
 
 =over 2
 
-=item * B<always> (alias: B<yes>, B<force>) to enable highlighting.
+=item * B<always> (alias: B<yes>, B<force>) enables highlighting.
 
-=item * B<never> (alias: B<no>, B<none>) to disable highlighting.
-1
-=item * B<auto> (alias: B<tty>, B<if-tty>) to enable highlighting only when
-output is connected to a terminal.
+=item * B<never> (alias: B<no>, B<none>) disables highlighting.
+
+=item * B<auto> (alias: B<tty>, B<if-tty>) enables highlighting only when
+output is connected to a terminal. -- That is, it will be disabled if user has
+piped the output to another command (S<C<| CMD>>) or directed it to a file
+(S<C<< > FILE >>>), but otherwise it will be enabled.
 
 =back
 
-See also B<-c> and B<-C>. (Option from B<grep>/B<ls>, but alias forms for
-I<WHEN> are from B<ls>.)
+Using B<--color> (without I<WHEN>) means B<--color=always>; not using
+B<--color> means B<--color=auto>. (See also B<-c> and B<-C>; Option from
+B<grep>/B<ls>, but the alias forms of I<WHEN> are only used by B<ls>.)
 
 =item B<-c>
 
@@ -746,11 +756,36 @@ Display the B<zdb> manpage (as extracted from Perl POD documentation from the
 source). The outputted manpage is fed to B<man>. (TODO: See L</Show manpage
 using B<$MANPAGER>>.)
 
-=item B<-P>I<CMD>, B<--pager=>I<CMD> (default: B<pager>)
+=item B<--pager=>I<CMD> (default: B<pager>)
 
-Specify which output pager to use. By default, B<pager> is used. The use of
-this option overrides the B<$PAGER> environment variable. (TODO: See L</Support
-arguments for pager>; Option from B<man>/B<bat>/B<delta>.)
+Specify a which command to use as a pager. (A pager is a program like B<more>
+or B<less> which allows you to navigate through large output in a more
+user-friendly way.) When a pager is used, the output of B<zdb> is piped to the
+pager, and the standard output of the pager takes the place of B<zdb>'s
+standard output. (Meaning that if a user pipes the output of B<zdb>, that pipe
+will also pass through the pager, if it is enabled.)
+
+By default B<pager> (which is often set to B<less> by our Linux distro) is
+used. This option overrides any pager specification given in the B<$PAGER>
+environment variable. (TODO: See L</Support arguments for pager>; Option from
+B<man>/B<bat>/B<delta>.)
+
+=item B<--paging>[B<=>I<WHEN>] (default: B<auto>)
+
+Whether to use a pager for the output.
+
+I<WHEN> may be: B<auto>, B<always> or B<never> (and works the same as for
+B<--color>). Using B<--paging> (without I<WHEN>) means B<--paging=always>; not
+using B<--paging> means B<--paging=auto>. (See also B<--pager=>I<CMD>, B<-p>
+and B<-P>; Option from B<bat>/B<delta>.)
+
+=item B<-p>
+
+Always use pager. (Short for B<--paging=always>.)
+
+=item B<-P>
+
+Never use pager. (Short for B<--paging=never>; Option from B<bat>.)
 
 =item B<--test>
 
@@ -898,6 +933,8 @@ module.
 [2025-11-18 19:26-19:39] v0.3.2 - Now gets QUERY from command line arguments.
 Very basic, all arguments a simply AND:ed, and each pattern is expected to
 match a whole word (with no wildcards or anything).
+
+[2025-11-18 19:39-21:21] v0.3.3 - Added B<--paging> option.
 
 
 =head1 COPYRIGHT AND LICENSE
@@ -1062,10 +1099,10 @@ use as '--pager "less -RF"'.) Currently using a space in either B<$PAGER> or
 B<--pager=>I<CMD> will most likely cause an error. (See B<--pager> in man(1),
 and B<bat --help>.)
 
-=head2 Add option B<--paging>[B<=>I<WHEN>]
+=head2 Suppression of length output
 
-Both B<bat> and B<delta> have this option. Should work exactly like
-B<--color>[B<=>I<WHEN>], but determine when the pager will be used.
+It would be convenient to be able to suppress lengthy output and/or disable
+pager for short output (shorter than a screenful?).
 
 =head2 Show manpage using B<$MANPAGER>
 
