@@ -22,7 +22,7 @@ END {
 }
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.4.0';                          # https://semver.org/
+our $VERSION='0.4.1';                          # https://semver.org/
 our $VERSION_DATE='19 November 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -182,75 +182,6 @@ sub manpage {
     exit 0;
 }
 
-# FIXME: Test some actual queries
-#        my $record = record(<<~"END_RECORD");
-#            country	Greenland
-#            name	Anders Grönroot
-#            END_RECORD
-sub test {
-    sub x { my ($x) = @_; return $x }
-    # OR mode (default).
-    !Query::any(\&x, [])           or die "Query::any => []";
-     Query::any(\&x, [1])          or die "Query::any => [1]";
-    !Query::any(\&x, [0, 0])       or die "Query::any => [0, 0]";
-     Query::any(\&x, [0, 1])       or die "Query::any => [0, 1]";
-     Query::any(\&x, [1, 0])       or die "Query::any => [1, 0]";
-     Query::any(\&x, [1, 1])       or die "Query::any => [1, 1]";
-    !Query::any(\&x, [0, 0, 0])    or die "Query::any => [0, 0, 0]";
-     Query::any(\&x, [0, 0, 1])    or die "Query::any => [0, 0, 1]";
-     Query::any(\&x, [0, 1, 0])    or die "Query::any => [0, 1, 0]";
-     Query::any(\&x, [0, 1, 1])    or die "Query::any => [0, 1, 1]";
-     Query::any(\&x, [1, 0, 0])    or die "Query::any => [1, 0, 0]";
-     Query::any(\&x, [1, 0, 1])    or die "Query::any => [1, 0, 1]";
-     Query::any(\&x, [1, 1, 0])    or die "Query::any => [1, 1, 0]";
-     Query::any(\&x, [1, 1, 1])    or die "Query::any => [1, 1, 1]";
-    # AND mode.
-     Query::all(\&x, [])           or die "Query::all => []";
-     Query::all(\&x, [1])          or die "Query::all => [1]";
-    !Query::all(\&x, [0, 0])       or die "Query::all => [0, 0]";
-    !Query::all(\&x, [0, 1])       or die "Query::all => [0, 1]";
-    !Query::all(\&x, [1, 0])       or die "Query::all => [1, 0]";
-     Query::all(\&x, [1, 1])       or die "Query::all => [1, 1]";
-    !Query::all(\&x, [0, 0, 0])    or die "Query::all => [0, 0, 0]";
-    !Query::all(\&x, [0, 0, 1])    or die "Query::all => [0, 0, 1]";
-    !Query::all(\&x, [0, 1, 0])    or die "Query::all => [0, 1, 0]";
-    !Query::all(\&x, [0, 1, 1])    or die "Query::all => [0, 1, 1]";
-    !Query::all(\&x, [1, 0, 0])    or die "Query::all => [1, 0, 0]";
-    !Query::all(\&x, [1, 0, 1])    or die "Query::all => [1, 0, 1]";
-    !Query::all(\&x, [1, 1, 0])    or die "Query::all => [1, 1, 0]";
-     Query::all(\&x, [1, 1, 1])    or die "Query::all => [1, 1, 1]";
-    # OR mode (default).
-    !Query::recurse(\&x, [])           or die "Query::recurse => []";
-     Query::recurse(\&x, [1])          or die "Query::recurse => [1]";
-    !Query::recurse(\&x, [0, 0])       or die "Query::recurse => [0, 0]";
-     Query::recurse(\&x, [0, 1])       or die "Query::recurse => [0, 1]";
-     Query::recurse(\&x, [1, 0])       or die "Query::recurse => [1, 0]";
-     Query::recurse(\&x, [1, 1])       or die "Query::recurse => [1, 1]";
-    !Query::recurse(\&x, [0, 0, 0])    or die "Query::recurse => [0, 0, 0]";
-     Query::recurse(\&x, [0, 0, 1])    or die "Query::recurse => [0, 0, 1]";
-     Query::recurse(\&x, [0, 1, 0])    or die "Query::recurse => [0, 1, 0]";
-     Query::recurse(\&x, [0, 1, 1])    or die "Query::recurse => [0, 1, 1]";
-     Query::recurse(\&x, [1, 0, 0])    or die "Query::recurse => [1, 0, 0]";
-     Query::recurse(\&x, [1, 0, 1])    or die "Query::recurse => [1, 0, 1]";
-     Query::recurse(\&x, [1, 1, 0])    or die "Query::recurse => [1, 1, 0]";
-     Query::recurse(\&x, [1, 1, 1])    or die "Query::recurse => [1, 1, 1]";
-    # AND mode.
-     Query::recurse(\&x, [], 1)        or die "Query::recurse => []";
-     Query::recurse(\&x, [1], 1)       or die "Query::recurse => [1]";
-    !Query::recurse(\&x, [0, 0], 1)    or die "Query::recurse => [0, 0]";
-    !Query::recurse(\&x, [0, 1], 1)    or die "Query::recurse => [0, 1]";
-    !Query::recurse(\&x, [1, 0], 1)    or die "Query::recurse => [1, 0]";
-     Query::recurse(\&x, [1, 1], 1)    or die "Query::recurse => [1, 1]";
-    !Query::recurse(\&x, [0, 0, 0], 1) or die "Query::recurse => [0, 0, 0]";
-    !Query::recurse(\&x, [0, 0, 1], 1) or die "Query::recurse => [0, 0, 1]";
-    !Query::recurse(\&x, [0, 1, 0], 1) or die "Query::recurse => [0, 1, 0]";
-    !Query::recurse(\&x, [0, 1, 1], 1) or die "Query::recurse => [0, 1, 1]";
-    !Query::recurse(\&x, [1, 0, 0], 1) or die "Query::recurse => [1, 0, 0]";
-    !Query::recurse(\&x, [1, 0, 1], 1) or die "Query::recurse => [1, 0, 1]";
-    !Query::recurse(\&x, [1, 1, 0], 1) or die "Query::recurse => [1, 1, 0]";
-     Query::recurse(\&x, [1, 1, 1], 1) or die "Query::recurse => [1, 1, 1]";
-}
-
 ###############################################################################
 
 sub uniq {
@@ -286,7 +217,6 @@ sub stringify_query {
     die "Error in query " . ref($query);
 }
 
-# FIXME: remove & instead use loaded ZDB file
 # my $record = record(<<~"END_RECORD");
 #     country	Greenland
 #     name	Anders Grönroot
@@ -489,6 +419,75 @@ sub record {
         }
         return $match ? $record : '';
     }
+
+    # FIXME: Test some actual queries
+    #        my $record = record(<<~"END_RECORD");
+    #            country	Greenland
+    #            name	Anders Grönroot
+    #            END_RECORD
+    sub test {
+        sub x { my ($x) = @_; return $x }
+        # OR mode (default).
+        !any(\&x, [])           or die "any => []";
+         any(\&x, [1])          or die "any => [1]";
+        !any(\&x, [0, 0])       or die "any => [0, 0]";
+         any(\&x, [0, 1])       or die "any => [0, 1]";
+         any(\&x, [1, 0])       or die "any => [1, 0]";
+         any(\&x, [1, 1])       or die "any => [1, 1]";
+        !any(\&x, [0, 0, 0])    or die "any => [0, 0, 0]";
+         any(\&x, [0, 0, 1])    or die "any => [0, 0, 1]";
+         any(\&x, [0, 1, 0])    or die "any => [0, 1, 0]";
+         any(\&x, [0, 1, 1])    or die "any => [0, 1, 1]";
+         any(\&x, [1, 0, 0])    or die "any => [1, 0, 0]";
+         any(\&x, [1, 0, 1])    or die "any => [1, 0, 1]";
+         any(\&x, [1, 1, 0])    or die "any => [1, 1, 0]";
+         any(\&x, [1, 1, 1])    or die "any => [1, 1, 1]";
+        # AND mode.
+         all(\&x, [])           or die "all => []";
+         all(\&x, [1])          or die "all => [1]";
+        !all(\&x, [0, 0])       or die "all => [0, 0]";
+        !all(\&x, [0, 1])       or die "all => [0, 1]";
+        !all(\&x, [1, 0])       or die "all => [1, 0]";
+         all(\&x, [1, 1])       or die "all => [1, 1]";
+        !all(\&x, [0, 0, 0])    or die "all => [0, 0, 0]";
+        !all(\&x, [0, 0, 1])    or die "all => [0, 0, 1]";
+        !all(\&x, [0, 1, 0])    or die "all => [0, 1, 0]";
+        !all(\&x, [0, 1, 1])    or die "all => [0, 1, 1]";
+        !all(\&x, [1, 0, 0])    or die "all => [1, 0, 0]";
+        !all(\&x, [1, 0, 1])    or die "all => [1, 0, 1]";
+        !all(\&x, [1, 1, 0])    or die "all => [1, 1, 0]";
+         all(\&x, [1, 1, 1])    or die "all => [1, 1, 1]";
+        # OR mode (default).
+        !recurse(\&x, [])           or die "recurse => []";
+         recurse(\&x, [1])          or die "recurse => [1]";
+        !recurse(\&x, [0, 0])       or die "recurse => [0, 0]";
+         recurse(\&x, [0, 1])       or die "recurse => [0, 1]";
+         recurse(\&x, [1, 0])       or die "recurse => [1, 0]";
+         recurse(\&x, [1, 1])       or die "recurse => [1, 1]";
+        !recurse(\&x, [0, 0, 0])    or die "recurse => [0, 0, 0]";
+         recurse(\&x, [0, 0, 1])    or die "recurse => [0, 0, 1]";
+         recurse(\&x, [0, 1, 0])    or die "recurse => [0, 1, 0]";
+         recurse(\&x, [0, 1, 1])    or die "recurse => [0, 1, 1]";
+         recurse(\&x, [1, 0, 0])    or die "recurse => [1, 0, 0]";
+         recurse(\&x, [1, 0, 1])    or die "recurse => [1, 0, 1]";
+         recurse(\&x, [1, 1, 0])    or die "recurse => [1, 1, 0]";
+         recurse(\&x, [1, 1, 1])    or die "recurse => [1, 1, 1]";
+        # AND mode.
+         recurse(\&x, [], 1)        or die "recurse => []";
+         recurse(\&x, [1], 1)       or die "recurse => [1]";
+        !recurse(\&x, [0, 0], 1)    or die "recurse => [0, 0]";
+        !recurse(\&x, [0, 1], 1)    or die "recurse => [0, 1]";
+        !recurse(\&x, [1, 0], 1)    or die "recurse => [1, 0]";
+         recurse(\&x, [1, 1], 1)    or die "recurse => [1, 1]";
+        !recurse(\&x, [0, 0, 0], 1) or die "recurse => [0, 0, 0]";
+        !recurse(\&x, [0, 0, 1], 1) or die "recurse => [0, 0, 1]";
+        !recurse(\&x, [0, 1, 0], 1) or die "recurse => [0, 1, 0]";
+        !recurse(\&x, [0, 1, 1], 1) or die "recurse => [0, 1, 1]";
+        !recurse(\&x, [1, 0, 0], 1) or die "recurse => [1, 0, 0]";
+        !recurse(\&x, [1, 0, 1], 1) or die "recurse => [1, 0, 1]";
+        !recurse(\&x, [1, 1, 0], 1) or die "recurse => [1, 1, 0]";
+         recurse(\&x, [1, 1, 1], 1) or die "recurse => [1, 1, 1]";
+    }
 }
 
 # Merges strings with ANSI background highlight. All strings must be identical
@@ -625,7 +624,7 @@ while (@ARGV) {
 }
 
 $opt{man}  and manpage();
-$opt{test} and do { say test() ? 'ALL TESTS OK' : 'TESTS FAILED'; exit };
+$opt{test} and do { say Query::test() ? 'ALL TESTS OK' : 'TESTS FAILED'; exit };
 $out       and do { print $out; exit };
 
 # FIXME: split $opt{pager} (?)
@@ -955,6 +954,8 @@ be used.)
 
 [2025-11-19 00:04-01:01] v0.4.0 - Added B<ZDBPAGER> for B<zdb>-specific pager
 defaults.
+
+[2025-11-19 02:28-02:41] v0.4.1 - Moved unit tests into Query module.
 
 
 =head1 COPYRIGHT AND LICENSE
