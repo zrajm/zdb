@@ -22,7 +22,7 @@ END {
 }
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.4.1';                          # https://semver.org/
+our $VERSION='0.4.2';                          # https://semver.org/
 our $VERSION_DATE='19 November 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -426,67 +426,70 @@ sub record {
     #            name	Anders Grönroot
     #            END_RECORD
     sub test {
-        sub x { my ($x) = @_; return $x }
+        require Test::More;                    # load at runtime
+        import Test::More;                     #   (not compile time)
+        my $f = sub { shift() };               # return 1st arg as-is
         # OR mode (default).
-        !any(\&x, [])           or die "any => []";
-         any(\&x, [1])          or die "any => [1]";
-        !any(\&x, [0, 0])       or die "any => [0, 0]";
-         any(\&x, [0, 1])       or die "any => [0, 1]";
-         any(\&x, [1, 0])       or die "any => [1, 0]";
-         any(\&x, [1, 1])       or die "any => [1, 1]";
-        !any(\&x, [0, 0, 0])    or die "any => [0, 0, 0]";
-         any(\&x, [0, 0, 1])    or die "any => [0, 0, 1]";
-         any(\&x, [0, 1, 0])    or die "any => [0, 1, 0]";
-         any(\&x, [0, 1, 1])    or die "any => [0, 1, 1]";
-         any(\&x, [1, 0, 0])    or die "any => [1, 0, 0]";
-         any(\&x, [1, 0, 1])    or die "any => [1, 0, 1]";
-         any(\&x, [1, 1, 0])    or die "any => [1, 1, 0]";
-         any(\&x, [1, 1, 1])    or die "any => [1, 1, 1]";
+        ok(!any($f, []),            "any => []");
+        ok( any($f, [1]),           "any => [1]");
+        ok(!any($f, [0, 0]),        "any => [0, 0]");
+        ok( any($f, [0, 1]),        "any => [0, 1]");
+        ok( any($f, [1, 0]),        "any => [1, 0]");
+        ok( any($f, [1, 1]),        "any => [1, 1]");
+        ok(!any($f, [0, 0, 0]),     "any => [0, 0, 0]");
+        ok( any($f, [0, 0, 1]),     "any => [0, 0, 1]");
+        ok( any($f, [0, 1, 0]),     "any => [0, 1, 0]");
+        ok( any($f, [0, 1, 1]),     "any => [0, 1, 1]");
+        ok( any($f, [1, 0, 0]),     "any => [1, 0, 0]");
+        ok( any($f, [1, 0, 1]),     "any => [1, 0, 1]");
+        ok( any($f, [1, 1, 0]),     "any => [1, 1, 0]");
+        ok( any($f, [1, 1, 1]),     "any => [1, 1, 1]");
         # AND mode.
-         all(\&x, [])           or die "all => []";
-         all(\&x, [1])          or die "all => [1]";
-        !all(\&x, [0, 0])       or die "all => [0, 0]";
-        !all(\&x, [0, 1])       or die "all => [0, 1]";
-        !all(\&x, [1, 0])       or die "all => [1, 0]";
-         all(\&x, [1, 1])       or die "all => [1, 1]";
-        !all(\&x, [0, 0, 0])    or die "all => [0, 0, 0]";
-        !all(\&x, [0, 0, 1])    or die "all => [0, 0, 1]";
-        !all(\&x, [0, 1, 0])    or die "all => [0, 1, 0]";
-        !all(\&x, [0, 1, 1])    or die "all => [0, 1, 1]";
-        !all(\&x, [1, 0, 0])    or die "all => [1, 0, 0]";
-        !all(\&x, [1, 0, 1])    or die "all => [1, 0, 1]";
-        !all(\&x, [1, 1, 0])    or die "all => [1, 1, 0]";
-         all(\&x, [1, 1, 1])    or die "all => [1, 1, 1]";
+        ok( all($f, []),            "all => []");
+        ok( all($f, [1]),           "all => [1]");
+        ok(!all($f, [0, 0]),        "all => [0, 0]");
+        ok(!all($f, [0, 1]),        "all => [0, 1]");
+        ok(!all($f, [1, 0]),        "all => [1, 0]");
+        ok( all($f, [1, 1]),        "all => [1, 1]");
+        ok(!all($f, [0, 0, 0]),     "all => [0, 0, 0]");
+        ok(!all($f, [0, 0, 1]),     "all => [0, 0, 1]");
+        ok(!all($f, [0, 1, 0]),     "all => [0, 1, 0]");
+        ok(!all($f, [0, 1, 1]),     "all => [0, 1, 1]");
+        ok(!all($f, [1, 0, 0]),     "all => [1, 0, 0]");
+        ok(!all($f, [1, 0, 1]),     "all => [1, 0, 1]");
+        ok(!all($f, [1, 1, 0]),     "all => [1, 1, 0]");
+        ok( all($f, [1, 1, 1]),     "all => [1, 1, 1]");
         # OR mode (default).
-        !recurse(\&x, [])           or die "recurse => []";
-         recurse(\&x, [1])          or die "recurse => [1]";
-        !recurse(\&x, [0, 0])       or die "recurse => [0, 0]";
-         recurse(\&x, [0, 1])       or die "recurse => [0, 1]";
-         recurse(\&x, [1, 0])       or die "recurse => [1, 0]";
-         recurse(\&x, [1, 1])       or die "recurse => [1, 1]";
-        !recurse(\&x, [0, 0, 0])    or die "recurse => [0, 0, 0]";
-         recurse(\&x, [0, 0, 1])    or die "recurse => [0, 0, 1]";
-         recurse(\&x, [0, 1, 0])    or die "recurse => [0, 1, 0]";
-         recurse(\&x, [0, 1, 1])    or die "recurse => [0, 1, 1]";
-         recurse(\&x, [1, 0, 0])    or die "recurse => [1, 0, 0]";
-         recurse(\&x, [1, 0, 1])    or die "recurse => [1, 0, 1]";
-         recurse(\&x, [1, 1, 0])    or die "recurse => [1, 1, 0]";
-         recurse(\&x, [1, 1, 1])    or die "recurse => [1, 1, 1]";
+        ok(!recurse($f, []),           "recurse => []");
+        ok( recurse($f, [1]),          "recurse => [1]");
+        ok(!recurse($f, [0, 0]),       "recurse => [0, 0]");
+        ok( recurse($f, [0, 1]),       "recurse => [0, 1]");
+        ok( recurse($f, [1, 0]),       "recurse => [1, 0]");
+        ok( recurse($f, [1, 1]),       "recurse => [1, 1]");
+        ok(!recurse($f, [0, 0, 0]),    "recurse => [0, 0, 0]");
+        ok( recurse($f, [0, 0, 1]),    "recurse => [0, 0, 1]");
+        ok( recurse($f, [0, 1, 0]),    "recurse => [0, 1, 0]");
+        ok( recurse($f, [0, 1, 1]),    "recurse => [0, 1, 1]");
+        ok( recurse($f, [1, 0, 0]),    "recurse => [1, 0, 0]");
+        ok( recurse($f, [1, 0, 1]),    "recurse => [1, 0, 1]");
+        ok( recurse($f, [1, 1, 0]),    "recurse => [1, 1, 0]");
+        ok( recurse($f, [1, 1, 1]),    "recurse => [1, 1, 1]");
         # AND mode.
-         recurse(\&x, [], 1)        or die "recurse => []";
-         recurse(\&x, [1], 1)       or die "recurse => [1]";
-        !recurse(\&x, [0, 0], 1)    or die "recurse => [0, 0]";
-        !recurse(\&x, [0, 1], 1)    or die "recurse => [0, 1]";
-        !recurse(\&x, [1, 0], 1)    or die "recurse => [1, 0]";
-         recurse(\&x, [1, 1], 1)    or die "recurse => [1, 1]";
-        !recurse(\&x, [0, 0, 0], 1) or die "recurse => [0, 0, 0]";
-        !recurse(\&x, [0, 0, 1], 1) or die "recurse => [0, 0, 1]";
-        !recurse(\&x, [0, 1, 0], 1) or die "recurse => [0, 1, 0]";
-        !recurse(\&x, [0, 1, 1], 1) or die "recurse => [0, 1, 1]";
-        !recurse(\&x, [1, 0, 0], 1) or die "recurse => [1, 0, 0]";
-        !recurse(\&x, [1, 0, 1], 1) or die "recurse => [1, 0, 1]";
-        !recurse(\&x, [1, 1, 0], 1) or die "recurse => [1, 1, 0]";
-         recurse(\&x, [1, 1, 1], 1) or die "recurse => [1, 1, 1]";
+        ok( recurse($f, [], 1),        "recurse => []");
+        ok( recurse($f, [1], 1),       "recurse => [1]");
+        ok(!recurse($f, [0, 0], 1),    "recurse => [0, 0]");
+        ok(!recurse($f, [0, 1], 1),    "recurse => [0, 1]");
+        ok(!recurse($f, [1, 0], 1),    "recurse => [1, 0]");
+        ok( recurse($f, [1, 1], 1),    "recurse => [1, 1]");
+        ok(!recurse($f, [0, 0, 0], 1), "recurse => [0, 0, 0]");
+        ok(!recurse($f, [0, 0, 1], 1), "recurse => [0, 0, 1]");
+        ok(!recurse($f, [0, 1, 0], 1), "recurse => [0, 1, 0]");
+        ok(!recurse($f, [0, 1, 1], 1), "recurse => [0, 1, 1]");
+        ok(!recurse($f, [1, 0, 0], 1), "recurse => [1, 0, 0]");
+        ok(!recurse($f, [1, 0, 1], 1), "recurse => [1, 0, 1]");
+        ok(!recurse($f, [1, 1, 0], 1), "recurse => [1, 1, 0]");
+        ok( recurse($f, [1, 1, 1], 1), "recurse => [1, 1, 1]");
+        done_testing();
     }
 }
 
@@ -624,8 +627,8 @@ while (@ARGV) {
 }
 
 $opt{man}  and manpage();
-$opt{test} and do { say Query::test() ? 'ALL TESTS OK' : 'TESTS FAILED'; exit };
-$out       and do { print $out; exit };
+$opt{test} and do { Query::test(); exit };
+$out       and do { print $out;    exit };
 
 # FIXME: split $opt{pager} (?)
 $pager_pid = open(STDOUT, '|-', $opt{pager})   # send all STDOUT through pager
@@ -794,7 +797,10 @@ Never use pager. (Short for B<--paging=never>; Option from B<bat>.)
 
 =item B<--test>
 
-Run built-in unit tests. (TODO: See L</Use framework for unit tests>.)
+Run built-in unit tests. Tests are run using Perl's standard B<Test::More>
+module. However, the module is loaded at runtime, rather than (the way it is
+normally done) at compile time---This is to avoid impacting the load time of
+normal use of the program (when the the B<--test> option isn't used).
 
 =item B<--version>
 
@@ -956,6 +962,9 @@ be used.)
 defaults.
 
 [2025-11-19 02:28-02:41] v0.4.1 - Moved unit tests into Query module.
+
+[2025-11-19 02:41-03:20] v0.4.2 - Now use Test::More for unit tests in Query
+module.
 
 
 =head1 COPYRIGHT AND LICENSE
@@ -1134,14 +1143,6 @@ determine how do display its manpage. Currently B<man -l -> is used to display
 the manpage, but to allow for B<$MANPAGER> the manpage should be written to
 tempfile and the manpager should be invoked as C<$MANPAGE FILE> (where I<FILE>
 is a path beginning with '.' or '/').
-
-=head2 Use framework for unit tests
-
-The unit tests run with B<--test> option are pretty primitive. They should be
-rewritten to run using some standard Perl test framework (like C<Test::Simple>,
-C<Test::More>). Maybe also the Perl Modulino pattern as well? B<NOTE:> Any
-testing framework modules should B<only> be loaded when running tests, never
-during normal execution.
 
 =head2 Add record sets B<%rec> (and B<%doc>)
 
