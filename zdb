@@ -22,8 +22,8 @@ END {
 }
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.3.4';                          # https://semver.org/
-our $VERSION_DATE='18 November 2025';
+our $VERSION='0.4.0';                          # https://semver.org/
+our $VERSION_DATE='19 November 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -595,7 +595,7 @@ my %opt = (
     file   => undef,
     man    => '',
     nocase => 1,
-    pager  => $ENV{PAGER} // 'pager',
+    pager  => $ENV{PAGER} // $ENV{ZDBPAGER} // 'pager',
     paging => -t STDOUT,
     test   => 0,
 );
@@ -765,12 +765,16 @@ pager, and the standard output of the pager takes the place of B<zdb>'s
 standard output. (Meaning that if a user pipes the output of B<zdb>, that pipe
 will also pass through the pager, if it is enabled.)
 
-By default B<pager> is used (this is set to B<less> by many Linux distros). The
-B<--pager> option overrides any B<$PAGER> environment variable setting. (See
-also B<$PAGER>; Option from B<man>/B<bat>/B<delta>.)
+The default command used is B<pager> (which in points to B<less> in many Linux
+distros). The B<--pager> option overrides any B<$ZDBPAGER> or B<$PAGER>
+environment variable setting. (See also L</ENVINORMENT>: 'B<$ZDBPAGER>,
+B<$PAGER>'; Option from B<man>/B<bat>/B<delta>.)
 
-Recommended setting: C<less -F> (this tells B<less> to exit immediately if the
-entirety of the output is one screenful or less).
+B<RECOMMENDED:> Add the line C<export ZDBPAGER='less -RFXi'> to your shell's
+init file. This will set the B<less> options B<-R> (allow color highlighting),
+B<-F> (exit immediately if output fits on screen), B<-X> (disable screen
+clearing on exit on some terminals), and B<-i> (turn off case-insensitivity
+when searching in B<less>).
 
 =item B<--paging>[B<=>I<WHEN>] (default: B<auto>)
 
@@ -883,18 +887,23 @@ match 'name' fields containing "d'armond":
 
 =over 7
 
-=item B<$PAGER>
+=item B<$ZDBPAGER>,  B<$PAGER> (fallback value: B<pager>)
 
-If set this defines the command to be used as a pager for the output (see
-B<--pager>, which can be used to override B<$PAGER> environment variable). By
-default B<pager> is used (this is set to B<less> by many Linux distros).
+Defines what command to use as pager for the output. B<$ZDBPAGER> overrides
+B<$PAGER>, both of which can be overridden by the B<--pager=>I<CMD> option.
 
-The content of page may be any command or pipeline of commands. (Though using a
-pipeline here is inadvisable, as some other commands (for example B<man>) which
-also makes use of the B<$PAGER> environment variable do not support it.
+The default command used is B<pager> (which in points to B<less> in many Linux
+distros).
 
-Recommended setting: C<less -F> (this tells B<less> to exit immediately if the
-entirety of the output is one screenful or less).
+B<$ZDBPAGER> may contain any command or command pipeline. But it is inadvisable
+to put a command pipeline in B<$PAGER>, as, for example B<man> (which also
+reads this variable) does not allow it.
+
+B<RECOMMENDED:> Add the line C<export ZDBPAGER='less -RFXi'> to your shell's
+init file. This will set the B<less> options B<-R> (allow color highlighting),
+B<-F> (exit immediately if output fits on screen), B<-X> (disable screen
+clearing on exit on some terminals), and B<-i> (turn off case-insensitivity
+when searching in B<less>).
 
 =back
 
@@ -943,6 +952,9 @@ match a whole word (with no wildcards or anything).
 [2025-11-18 21:21-21:42] v0.3.4 - Tested/verified and documented the B<$PAGER>
 and B<--pager=>I<CMD> capabilities. (Yes, Perl allow more complex commands to
 be used.)
+
+[2025-11-19 00:04-01:01] v0.4.0 - Added B<ZDBPAGER> for B<zdb>-specific pager
+defaults.
 
 
 =head1 COPYRIGHT AND LICENSE
@@ -1033,15 +1045,20 @@ Below are some planned future features.
 
 =head2 Read QUERY arguments
 
-=head2 Add B<$ZDBPAGER> environment variable
-
-An environment variable to override B<$PAGER>, but, which in turn, can be
-overridden by the B<--pager=>I<CMD> argument.
-
 =head2 Search in comments
 
 Option to enable/disable searching comment. By default comments should not be
 searched.
+
+=head2 Option to user pager's hiliting
+
+Add option to, instead of highlighting the output, use pager options for the
+highlighting. When using B<less> as a pager, for example, this would involve
+invoking it with the B<--use-backslash> and B<+/>I<REGEX> options.
+
+This would have the drawback that overlapping searches would not be marked, but
+the benefit that the user would be able to easily navigate back and forth
+between the matches inside the pager.
 
 =head2 Automatic linebreaking
 
@@ -1112,7 +1129,10 @@ pager for short output (shorter than a screenful?).
 =head2 Show manpage using B<$MANPAGER>
 
 The B<--manpage> option should use the B<$MANPAGER> environment variable to
-determine how do display its manpage.
+determine how do display its manpage. Currently B<man -l -> is used to display
+the manpage, but to allow for B<$MANPAGER> the manpage should be written to
+tempfile and the manpager should be invoked as C<$MANPAGE FILE> (where I<FILE>
+is a path beginning with '.' or '/').
 
 =head2 Use framework for unit tests
 
