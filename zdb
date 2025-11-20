@@ -22,8 +22,8 @@ END {
 }
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.4.2';                          # https://semver.org/
-our $VERSION_DATE='19 November 2025';
+our $VERSION='0.4.3';                          # https://semver.org/
+our $VERSION_DATE='20 November 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -167,8 +167,8 @@ sub version {
 
 sub manpage {
     # Run 'pod2man'.
-    open my $fh, '-|', qw/pod2man --utf8 --errors=die/,
-        "--release=$PROGRAM $VERSION", __FILE__
+    open(my $fh, '-|', qw/pod2man --utf8 --errors=die/,
+        "--release=$PROGRAM $VERSION", __FILE__)
         or die "Can't exec 'pod2man': $!\n";
     my @manpage = <$fh>;
     close($fh) or die (
@@ -693,6 +693,7 @@ record.
 
 =back
 
+
 =head1 OPTIONS
 
 =over 7
@@ -888,6 +889,68 @@ match 'name' fields containing "d'armond":
     zdb "name:d'armond" <FILE
 
 
+=head1 RETURN VALUE
+
+FIXME
+
+
+=head1 DIAGNOSTICS
+
+FIXME: Add missing error messages
+
+=over 4
+
+=item Can't exec 'man': I<REASON>
+
+This resulted from C<< zdb --manpage >> not being able to find or execute the
+B<man> viewer needed to show the manpage. On my Linux machine the B<man> tool
+is installed by default (and is available in the Debian B<man-db> package). If
+worst comes to worst, the documentation is viewable (in the fairly readable
+'POD' format) by looking at the program 'binary' as well.
+
+=item Can't exec 'pod2man': I<REASON>
+
+=item Command 'pod2man' failed: I<REASON>
+
+This resulted from C<< zdb --manpage >> not being able to find or execute the
+Perl tool B<pod2man>, which is used to generate the manpage. This tool comes
+with the standard Perl installation, but the documentation can also be found
+inside the B<zdb> source code itself (and is fairly readable).
+
+=back
+
+
+=head1 EXAMPLES
+
+=head2 'Self-searchable' ZDB databases
+
+One may create 'self-searchable' ZDB database, which can be invoked as if the
+database itself was the B<zdb> executable. For example, my Klingon dictionary
+is called F<klingon.zdb>, and to search for the word 'phaser' I can simply
+write:
+
+     ./klingon.zdb phaser
+
+To achieve this, the add an initial shebang (C<#!>) to your database which
+points to the B<zdb> executable. This line also needs to contain the B<zdb>
+option B<-f> (or B<--file>), and (given that B<zdb> resides in your F</bin>
+directory) may look like this:
+
+    #!/bin/zdb -f
+
+Or, if you don't want to provide the full path to B<zdb>, but you know that it
+will be found in one of the directories in your B<$PATH> environment variable,
+you can use the following shebang line. (Using B<env> is also necessary if you
+want to provide additional options B<zdb>. Just make sure that the
+B<-f>/B<--file> option is the very last one on the line.)
+
+    #!/bin/env -S zdb -f
+
+Finally, the B<zdb> file needs to be executable for this to work.
+
+    chmod +x ZDBFILE
+
+
 =head1 ENVIRONMENT
 
 =over 7
@@ -911,6 +974,29 @@ clearing on exit on some terminals), and B<-i> (turn off case-insensitivity
 when searching in B<less>).
 
 =back
+
+
+=head1 FILES
+
+The only file read by B<zdb> is the inputted ZDB database file. Currently all
+output is written to standard output, but this B<will change>. In the future a
+file specified with the B<--file=>I<FILE> option will be modified when
+inserting or deleting fields or records. Like now, when the ZDB database is
+given on standard input, modified content will be written to standard output.
+
+
+=head1 CAVEATS
+
+FIXME
+
+
+=head1 RESTRICTIONS
+
+Only two different colors are used when highlighting found matches. This means
+that if multiple search terms overlap, the color intensity will only ever
+accurately reflect one or two overlapping matches. The color will not increase
+beyond that. This is not expected to change in the future. (As overlapping
+matches are presumably pretty rare anyways.)
 
 
 =head1 AUTHOR
@@ -965,6 +1051,10 @@ defaults.
 
 [2025-11-19 02:41-03:20] v0.4.2 - Now use Test::More for unit tests in Query
 module.
+
+[2025-11-20 07:31-09:08] v0.4.3 - Updated manpage. Added description of how to
+use B<zdb> as a shebang. Made sure manpage includes all required headlines.
+Added notes on L</FILES> and L</RESTRICTIONS>.
 
 
 =head1 COPYRIGHT AND LICENSE
@@ -1074,11 +1164,6 @@ between the matches inside the pager.
 
 There should maybe be an option to produce automatic linebreaks in fields? How
 about fields containing explicit newlines? (Like an address, or poetry?)
-
-=head2 Verify manpage contents
-
-Should verify that all manadotry parts of a manpage are included. (See C<man
-perlpodstyle>.)
 
 =head2 Atomic file updates
 
