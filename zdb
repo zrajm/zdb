@@ -22,7 +22,7 @@ END {
 }
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.4.4';                          # https://semver.org/
+our $VERSION='0.5.0';                          # https://semver.org/
 our $VERSION_DATE='23 November 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -39,7 +39,7 @@ Manipulate ZDB database.
       --help-query        Show QUERY syntax (it's very googlish)
   -i, --ignore-case       Ignore case when searching (default)
   -I, --no-ignore-case    Don't ignore case when searching
-      --manpage           Show zdb manpage
+  -M, --manual            Show zdb manual page (with 'man')
       --pager=CMD         Use CMD as pager (default: 'pager')
       --paging[=WHEN]     When to use pager (default: 'auto')
   -p                      Always use pager (--paging=always)
@@ -616,7 +616,7 @@ while (@ARGV) {
     /^(       --help-query    )$/x and do { $out = $QUERY;              next };
     /^(-i    |--ignore-case   )$/x and do { $opt{nocase} = 1;           next };
     /^(-I    |--no-ignore-case)$/x and do { $opt{nocase} = 0;           next };
-    /^(       --manpage       )$/x and do { $opt{man} = 1;              next };
+    /^(-M    |--manual        )$/x and do { $opt{man} = 1;              next };
     /^        --pager  (=(.*))?$/x and do { $opt{pager} = $2//shift;    next };
     /^        --paging (=(.*))?$/x and do { $opt{paging} = whenarg($2); next };
     /^ -p                      $/x and do { $opt{paging} = 1;           next };
@@ -753,11 +753,12 @@ line. (Option from B<grep>.)
 Consider case distinctions when searching. By default search is
 case-insensitive, use this option to override that. (Option from B<grep>.)
 
-=item B<--manpage>
+=item B<-M>, B<--manual>
 
-Display the B<zdb> manpage (as extracted from Perl POD documentation from the
-source). The outputted manpage is fed to B<man>. (TODO: See L</Show manpage
-using B<$MANPAGER>>.)
+Display the B<zdb> manual page (with B<man>). The manual page is included in
+the 'binary' itself (a Perl program) in the form of Perl-style POD
+documentation. (TODO: See L</Show manpage using B<$MANPAGER>>; Option from
+B<curl>.)
 
 =item B<--pager=>I<CMD> (default: B<pager>)
 
@@ -902,7 +903,7 @@ FIXME: Add missing error messages
 
 =item Can't exec 'man': I<REASON>
 
-This resulted from C<< zdb --manpage >> not being able to find or execute the
+This resulted from C<< zdb --manual >> not being able to find or execute the
 B<man> viewer needed to show the manpage. On my Linux machine the B<man> tool
 is installed by default (and is available in the Debian B<man-db> package). If
 worst comes to worst, the documentation is viewable (in the fairly readable
@@ -912,7 +913,7 @@ worst comes to worst, the documentation is viewable (in the fairly readable
 
 =item Command 'pod2man' failed: I<REASON>
 
-This resulted from C<< zdb --manpage >> not being able to find or execute the
+This resulted from C<< zdb --manual >> not being able to find or execute the
 Perl tool B<pod2man>, which is used to generate the manpage. This tool comes
 with the standard Perl installation, but the documentation can also be found
 inside the B<zdb> source code itself (and is fairly readable).
@@ -1057,6 +1058,13 @@ use B<zdb> as a shebang. Made sure manpage includes all required headlines.
 Added notes on L</FILES> and L</RESTRICTIONS>.
 
 [2025-11-23 11:18-13:44] v0.4.4 - Updated manpage with ideas for future.
+
+[2025-11-23 13:44-13:58] v0.5.0 - Renamed B<--manpage> option to B<--manual>
+(and added the short option B<-M>). The new option names are the same as those
+used by the B<curl> command. Unfortunately, almost no other commands seem to
+provide a flag to show their B<man> page, so it isn't very easy to find an
+intuitive option name to use. :(
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1227,7 +1235,7 @@ pager for short output (shorter than a screenful?).
 
 =head2 Show manpage using B<$MANPAGER>
 
-The B<--manpage> option should use the B<$MANPAGER> environment variable to
+The B<--manual> option should use the B<$MANPAGER> environment variable to
 determine how do display its manpage. Currently B<man -l -> is used to display
 the manpage, but to allow for B<$MANPAGER> the manpage should be written to
 tempfile and the manpager should be invoked as C<$MANPAGE FILE> (where I<FILE>
