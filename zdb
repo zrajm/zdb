@@ -22,8 +22,8 @@ END {
 }
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.4.3';                          # https://semver.org/
-our $VERSION_DATE='20 November 2025';
+our $VERSION='0.4.4';                          # https://semver.org/
+our $VERSION_DATE='23 November 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -1056,6 +1056,7 @@ module.
 use B<zdb> as a shebang. Made sure manpage includes all required headlines.
 Added notes on L</FILES> and L</RESTRICTIONS>.
 
+[2025-11-23 11:18-13:44] v0.4.4 - Updated manpage with ideas for future.
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1159,6 +1160,9 @@ invoking it with the B<--use-backslash> and B<+/>I<REGEX> options.
 This would have the drawback that overlapping searches would not be marked, but
 the benefit that the user would be able to easily navigate back and forth
 between the matches inside the pager.
+
+Maybe B<delta> uses the option B<--navigate> to: "Activate diff navigation. Use
+'n' to jump forwards and 'N' to jump backwards."
 
 =head2 Automatic linebreaking
 
@@ -1273,10 +1277,72 @@ I<YYYYMMDDB<_>HHMMSS>B<.diff>. This way, any of the patches can be reapplied to
 undo that change.---Or, possibly, diffs could instead be added to a B<.zip>
 file (or other archive).
 
+=head2 Compression
+
+Using some kinda compression would be nice. The output should be ASCII safe,
+and use z85 encoding (this is great because it avoids characters like B<">,
+B<'> etc which makes it (relatively) easy to include in JSON without having to
+escape stuff).
+
+The Debian package B<coreutils> come with B<basenc> which can be used for z85
+encoding. (Encode with C<basenc --z85>, decode with C<basenc --z85 -d>.)
+
+=over 12
+
+=item Compress
+
+C<< | xz -c | basenc  --z85 >>
+
+
+=item Decompress:
+
+C<< | basenc --z85 -d | xz -d >>
+
+=back
+
+The file should be provided with a magic number which specifies both the,
+compression, encoding (and possible encryption) as well as the fact that it is
+a B<zbd> file. Ideally this should be in the form of a shebang line (so that
+the file becomes directly 'executable' by B<zdb>). Maybe implement an option
+input/output filtering different stages, maybe something like
+B<--format=ed25519:xz:z85> or B<--encoding=ed25519,xz,z85> (the order would
+automatically reverse on (the order would automatically reverse on
+read/decode).
+
 =head2 Encryption
 
 (Pipe input/output through external secure tool) (also, how make THESE diffs
 secure -- encrypted archive of some kind?).
+
+The command line tool B<age> (in Debian package of same name) should be useful
+here. The following commands allow input on standard input, and output on
+standard output making them ideal to feed a database through them.
+
+=over 9
+
+=item Encrypt:
+
+C<< age --armor --recipients-file=SSH_PUBKEY >>
+
+=item Decrypt:
+
+C<< age --decrypt --identity=SSH_KEYFILE >>
+
+=back
+
+However, B<age> does not support B<ssh-agent>, which would be very cool to use
+for password caching, and it would be very cool to use this so that the
+password doesn't have to be typed over and over again for every invocation of
+B<zdb>.
+
+Also, the B<age> ASCII armored format does not allow for leading and trailing
+extra data, so a shebang line would have to be inserted/filtered out by B<zdb>
+itself (which also makes the file less usable/recoverable for use outside with
+other tools than B<zdb>).
+
+Additionally, it'd be kinda nice to compress the datastream before encrypting
+it. The compression schema should be specifiable when writing the file, chosen
+automatically on reading (and rewriting, unless overridden by option).
 
 =head2 Add date fields
 
@@ -1293,6 +1359,15 @@ B<--delete-field> which deletes all fields matched by query (though the option
 names should probably be shorter). Or maybe use some other scheme? (Like using
 I<FIELD>B<=>I<VALUE> pairs with empty value to remove a field---though that
 might be better reserved for setting a field, but leaving it empty.)
+
+=head2 YAML support for database
+
+Each record would be what YAML calls a 'document' (separated by C<---> on a
+line of its own). This also requires support for more complicated data
+structures (necessitating hierarchical field names). YAML also have alias
+support, and a string like C<false> will, if unquoted, be interpreted
+differently depending on schema. So schemas need to be in place for this to be
+implementable (see https://spacelift.io/blog/yaml).
 
 =cut
 
