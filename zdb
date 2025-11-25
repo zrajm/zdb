@@ -9,20 +9,8 @@ use warnings  qw(FATAL utf8);    # fatalize encoding glitches
 use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
-use Data::Dumper;
-
-my $pager_pid;
-END {
-    if ($? > 0) {
-        kill('TERM', $pager_pid) if $pager_pid;
-    } else {
-        close STDOUT or die "Can't close standard output: $!\n";
-    }
-    wait();                                    # wait for pager to exit
-}
-
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.5.1';                          # https://semver.org/
+our $VERSION='0.5.2';                          # https://semver.org/
 our $VERSION_DATE='25 November 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -138,6 +126,16 @@ tlh:(tlha tlhup)
 
 # Option to enable/disable diacritics (without 'a' would match 'ä')
 QUERY_END
+
+my $pager_pid;
+END {
+    if ($? > 0) {
+        kill('TERM', $pager_pid) if $pager_pid;
+    } else {
+        close STDOUT or die "Can't close standard output: $!\n";
+    }
+    wait();                                    # wait for pager to exit
+}
 
 # Recutils:
 # https://www.gnu.org/software/recutils/manual/recutils.html
@@ -1088,6 +1086,9 @@ intuitive option name to use. :(
 [2025-11-25 08:49-11:29] v0.5.1 - Expanded manpage. Improved chapters
 DESCRIPTION, QUERIES (subchapters 'Logic Operators', 'Field Prefixes' and
 'Quoting'). Added and clarified a buncha stuff on the 'FUTURE' wishlist.
+
+[2025-11-25 12:31-12:36] v0.5.2 - Moved END {} block to after info variables.
+
 
 
 =head1 COPYRIGHT AND LICENSE
