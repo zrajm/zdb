@@ -22,8 +22,8 @@ END {
 }
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.5.0';                          # https://semver.org/
-our $VERSION_DATE='23 November 2025';
+our $VERSION='0.5.1';                          # https://semver.org/
+our $VERSION_DATE='25 November 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -672,26 +672,30 @@ B<zdb> [I<OPTION>]... [B<-->] [[I<QUERY>]... [I<FIELD>B<=>I<VALUE>]...]...
 =head1 DESCRIPTION
 
 B<zdb> is a utility for searching and manipulating human-readable text-based
-database files in the ZDB format, it is similar to GNU Recutils in intention,
-with the difference that it strives to have a more human-readable query
-language as well. Queries are thus usually short and simple, yet allow for
-complex queries when needed.
+database files (in ZDB format).
 
-B<zdb> operates in four different modes, depending on whether either or both of
-I<QUERY> and I<FIELD>B<=>I<VALUE> have been provided.
+A I<FILE> of C<-> stands for standard input. When receiving input on standard
+input B<zdb> acts like a text filter (outputting the results to standard
+output). When a (non C<->) I<FILE> is specified, that file is updated
+(atomically) on success.
 
-=over 2
+The I<QUERY> language is inspired by search engines, and uses (in order of
+precedence) C<-> (minus) for NOT, C<␣> (space) for AND, and C<,> for OR, C<(…)>
+(parentheses) for grouping, and a prefix notation to specify what fields to
+search. (See L</QUERIES> below.)
 
-=item * Only I<QUERY>: Find and show matching records.
+There are four different modes (based on whether the I<QUERY> and/or
+I<FIELD>B<=>I<VALUE> arguments were provided or not):
 
-=item * Only I<FIELD>B<=>I<VALUE>: Insert given fields as a new record.
-
-=item * Both I<QUERY> and I<FIELD>B<=>I<VALUE>: Insert given fields in matching
-record.
-
-=item * Neither: Display a database summary.
-
-=back
+    ┌───────────────────┬───────────────────────────────┬────────────┐
+    │ –                 │ Show database summary         │ read-only  │
+    ├───────────────────┼───────────────────────────────┤            │
+    │ QUERY             │ Show matching records         │            │
+    ├───────────────────┼───────────────────────────────┼────────────┤
+    │ QUERY FIELD=VALUE │ Add fields to matching record │ read-write │
+    ├───────────────────┼───────────────────────────────┤            │
+    │ FIELD=VALUE       │ Insert fields as new record   │            │
+    └───────────────────┴───────────────────────────────┴────────────┘
 
 
 =head1 OPTIONS
@@ -813,81 +817,97 @@ Output version information and exit.
 
 =head1 QUERIES
 
-All the QUERY arguments are joined together before being read by B<zdb>. This
-allows simple queries to written without quotes. Queries are case-insensitive
-by default (unless overridden with B<--no-ignore-case>).
+B<zdb> uses a sloppy query language, inspired by web search engines. It strives
+to be terse, intuitive, expressive, and forgiving. Unmatched parentheses and
+quotes are fine (they will be terminated for you). Text in quotes is
+interpreted literally (special characters/operators lose their meaning).
 
-Missing parentheses are automatically added at the start/end of the query.
-Query words only match whole words in the data, to match a partial word use
-C<*>. For example, use C<x*> to match words beginning with "x", or C<*x> for to
-match words ending in "x".
+B<NOTE:> QUERY arguments are joined together (with spaces) before being
+processed. But remember that the shell processes its quotes before the
+arguments are ever seen by B<zdb>. This means that you have to quote your
+quotes! It's usually most convenient to put single quotes around your whole
+query (which gets eaten by the shell) and then use double quotes inside that if
+you need it. For example:
+
+    zdb 'name:("crew member",crewmember)' -fklingon.zdb
+
+Query is matched word-by-word (C<B<cat>> does not match "cats"). An (unquoted)
+asterisk (B<*>) may be used to match zero or more letters: C<B<cat*>> matches
+both "cat" and "cats" and "catwoman"; C<B<*fix>> matches "fix", "prefix", and
+"suffix".
+
+Queries are case-insensitive (unless you use B<--no-ignore-case>).
+
+=head2 Logic Operators
 
 Boolean operators are also supported:
 
-    ┌──────────────────────┐
-    │   Boolean operators  │   From the most tightly binding, to the
-    ├────────┬─────────────┤   least binding.
-    │ NOT    │  -  (minus) │
-    ├────────┼─────────────┤
-    │ AND    │  ␣  (space) │
-    ├────────┼─────────────┤
-    │ OR     │  ,  (comma) │
-    ├────────┼─────────────┤   ¹ Missing parentheses are automatically
-    │ GROUP¹ │ (…) (parens)│     added at the start or end of a query.
-    └────────┴─────────────┘
+    ┌──────────────┬────────────┐
+    │  Character   │  Used For  │  From the most tightly binding, to the
+    ├──────────────┼────────────┤  least binding.
+    │  :  (colon)  │  prefix    │
+    ├──────────────┼────────────┤  Thus: '-a:b, -c d' = '-(a:b), (-c d)'.
+    │  -  (minus)  │  not       │
+    ├──────────────┼────────────┤
+    │  ␣  (space)  │  and       │
+    ├──────────────┼────────────┤
+    │  ,  (comma)  │  or        │
+    ├──────────────┼────────────┤  ¹ Any missing parentheses are automatically
+    │ (…) (parens) │  grouping¹ │    added at start/end of QUERY.
+    └──────────────┴────────────┘
 
 
 =head2 Field Prefixes
 
-To search only a specific field, use 'I<prefix>B<:>I<value>' (that is,
-B<name:anderson> will search for 'anderson' all 'name' fields). No prefix is
-the same as 'B<*:>'. The prefix syntax actually the same as the value part, so
-stuff like B<(name,alias):anderson> (in 'name' or 'alias' fields, search for
-'anderson') also works! You can also chain the prefixes B<name:magnus:anderson>
-will match entries that that have a 'name' field that contains both 'magnus'
-and 'anderson' (in any order). Just 'name:' (without value) matches entries
-that has a field by that name (ignoring any field value).
+To only search a specific field, a field name prefix (I<FIELD>B<:>I<VALUE>) may
+be used. (For example, C<name:anderson> will find all occurrences of 'anderson'
+in the 'name' field.) The full syntax is:
 
-Searching is supposed to be simple, and queries fast and easy to write. Enter
-Sloppy Query, the *very forgiving* query language. Did you not balance your
-parentheses? Never mind,
+[I<FIELD>B<:>]I<VALUE>[B<:>I<VALUE>]...
 
-The query language is called 'sloppy query', it is inspired by web search
-engines, and focused on expressing a lot with a little. (ZDB is to a large
-extent inspired by GNU Recutils, but one of the things I didn't like with
-Recutils was its pretty verbose query language.)
+Where no C<I<FIELD>B<:>> means the same as C<B<*:>…>.
+
+Both I<FIELD> and I<VALUE> may be arbitrarily complex Boolean expressions.
+Since B<:> is so tightly binding, however, parentheses are required around each
+I<FIELD> and I<VALUE> containing a complex expression.
+(C<(name,alias):anderson> will find 'anderson' in either 'name' or 'alias'.)
+
+When multiple I<VALUE>s are chained together (…B<:>I<VALUE>B<:>I<VALUE>), each
+subsequent I<VALUE> is only sought after in fields that have matched all of the
+previous I<VALUE>(s) in the chain. (Thus, C<name:magnus:anderson> will match
+all 'name' fields which contain B<both> 'magnus' and 'anderson', and
+C<(name,alias):magnus:anderson> will match 'name' or 'alias' fields that
+contain B<both> 'magnus' and 'anderson' B<in the same field>.)
+
+C<name:> (without a value) will match all fields by than name (regardless of
+value).
 
 
 =head2 Quoting
 
-To search for a literal occurrence of a character mentioned above, put
-character in question in double quotes ('x*' searches for words starting with
-'x', while '"x*"'>
+    ┌──────────────────┬───────────────┐
+    │  Character       │ Used For      │
+    ├──────────────────┼───────────────┤
+    │ "…" (quotes)     │ quoting       │
+    ├──────────────────┼───────────────┤
+    │ ""  (two quotes) │ literal quote │
+    ├──────────────────┼───────────────┤
+    │  *  (asterisk)   │ word char     │
+    └──────────────────┴───────────────┘
 
-Special characters may be put in double quotes to perform a literal search for
-them. However, quoting in the shell is a little bit tricky, since the shell
-strips quotes. This means that for a quote to be visible to B<zdb> it must be
-quoted twice. The following will find the phrase 'great britain' in any country
-field:
+Only double quotes (B<">) have a special meaning, single quotes (B<'>) are
+taken literally. (C<d'armond> will thus match all occurrences said name.)
 
-    zdb 'country:"great britain"' <FILE
+All characters inside quotes are taken literally. If you want to search for a
+word or phrase that contains special characters (like parentheses, an asterisk,
+or spaces) but them inside quotes. (C<phaser pistol> will find records
+containing both the words 'phaser' and 'pistol', while C<"phaser pistol"> will
+find all occurrences of the phrase "phaser pistol".)
 
-This next command will instead find all records with a 'country' field
-containing 'great', and any field containing 'britain' (probably B<not> what
-you intended).
-
-    zdb 'country:great britain' <FILE
-
-A third option is using the B<:> operator multiple times. The following command
-will match all 'country' fields that contain both the words 'great' and
-'britain' (in the same field, but regardless of which order the words come in).
-
-    zdb 'country:great:britain' <FILE
-
-Single quotes do not have a special meaning in a QUERY. The following will
-match 'name' fields containing "d'armond":
-
-    zdb "name:d'armond" <FILE
+Quotes can begin and end anywhere, and so to search for a phrase where one may
+vary use something like B<C<"the "*" of">>. The only exception to this is that
+two quotes in a row (regardless of whether it occurs inside or outside of a
+quote) will match a literal quote.
 
 
 =head1 RETURN VALUE
@@ -1065,6 +1085,10 @@ used by the B<curl> command. Unfortunately, almost no other commands seem to
 provide a flag to show their B<man> page, so it isn't very easy to find an
 intuitive option name to use. :(
 
+[2025-11-25 08:49-11:29] v0.5.1 - Expanded manpage. Improved chapters
+DESCRIPTION, QUERIES (subchapters 'Logic Operators', 'Field Prefixes' and
+'Quoting'). Added and clarified a buncha stuff on the 'FUTURE' wishlist.
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1159,6 +1183,42 @@ Below are some planned future features.
 Option to enable/disable searching comment. By default comments should not be
 searched.
 
+=head2 Smart case matching
+
+B<ucg> (UniversalCodeGrep) and B<ag> (The Silver Searcher) both have a
+B<--smart-case> option (B<ag> also has shortopt B<-S>, while B<ucg> doesn't
+have a shortopt). B<ag> describes it as: "Match case-sensitively if there are
+any uppercase letters in PATTERN, case-insensitively otherwise. Enabled by
+default." And B<ucg> describes it as: "Ignore case if PATTERN is all lowercase
+(default: enabled)."
+
+B<less> has the B<-i>/B<--ignore-case> option with the same function: "Causes
+searches to ignore case; that is, uppercase and lowercase are considered
+identical. This option is ignored if any uppercase letters appear in the search
+pattern; in other words, if a pattern contains uppercase letters, then that
+search does not ignore case."
+
+Maybe add b<-s>/B<--smart-case> and b<-S>/B<--no-smart-case>. This option
+should override (and be overridden by) B<--ignore-case> and
+B<--no-ignore-case>.
+
+=head2 Number matching
+
+Use C<[…]> to match numbers. The brackets themselves will match a number in the
+text (a regex like C<< [+-]?(\d*\.)?\d+ >>, though that doesn't cover numbers
+in scientific notation). After matching the mathematical expression inside the
+brackets will be applied as well, so that an empty bracket C<[]> matches any
+number; C<[E<lt>100]> matches any number below 100; C<[1990..2020]> will match
+a number between 1990 and 2020 (inclusive), and C<[=42]> matches the number 42.
+
+=head2 Date matching
+
+How to solve date matching? I would like something similar to the above number
+matching, but that allows for dates. (Internally translating stuff to epoch
+time and comparing it that way.) Ideally the date comparison should extract and
+parse date in the locale specified for the field (and be able to extract all
+kinds of date formats, from 'December 1, 2020' to '2020-12-01').
+
 =head2 Option to user pager's hiliting
 
 Add option to, instead of highlighting the output, use pager options for the
@@ -1218,6 +1278,13 @@ interleaved fields of different names, the internal order between fields of the
 same name should be retained (but the different field names should no longer be
 interleaved) after sorting.
 
+=head2 Argument to clean up query
+
+It can sometimes be hard to know how exactly B<zdb> will interpret your query.
+Using this argument should show a cleaned up version of QUERY (suppressing
+search). -- Should this also simplify Boolean logic? Or just show what the
+query looks like after the shell has stripped its quoting? Both?
+
 =head2 Field types and field verification
 
 B<recutils> uses B<%type> and B<%typedef> for this purpose. Also the fields
@@ -1273,7 +1340,9 @@ trying to modify the same file at the same time.
 
 =head2 Highlight color config
 
-User should be able to choose highlight color.
+User should be able to choose highlight color. (Should we maybe take colors
+from B<$GREP_COLORS> environment variable? And make it possible to override
+with our own B<ZDBCOLORS>?)
 
 =head2 Undo
 
@@ -1376,6 +1445,38 @@ structures (necessitating hierarchical field names). YAML also have alias
 support, and a string like C<false> will, if unquoted, be interpreted
 differently depending on schema. So schemas need to be in place for this to be
 implementable (see https://spacelift.io/blog/yaml).
+
+=head2 Boolean operator aliases
+
+For maximum sloppiness, maybe implement all of the most common ways of writing
+the Boolean operators? This would be a full table:
+
+    ┌─────────────────────────────────┐
+    │   Boolean operators             │  From the most tightly binding, to the
+    ├────────┬─────┬──────────────────┤  least binding.
+    │ NOT    │  !  │  -  (minus)      │
+    ├────────┼─────┼──────────────────┤
+    │ AND    │  &  │  ␣  (space)      │
+    ├────────┼─────┼──────────────────┤
+    │ OR     │  |  │  ,  (comma)      │
+    ├────────┼─────┼──────────────────┤
+    │ XOR    │  ^  │  ;  (semicolon?) │<-- Priority? (Also, maybe use '/'?)
+    ├────────┼─────┴──────────────────┤
+    │ GROUP¹ │ (…) (parens)           │ ¹ Missing parentheses are automatically
+    └────────┴────────────────────────┘   added at the start or end of a query.
+
+Currently only minus, space, comma and parentheses are implemented. The
+additional version would just be for convenience for people who are used to
+some other name for the operator. For the spelled out versions of the operators
+capital letters are required (lower case should always match the words
+literally), and (of course) it'll only work when they're unquoted.
+
+Also the more C-like versions C<< && >> and C<< || >> will have exactly same
+effect as their non-doubled counterparts---the parser simply sees an empty
+search expression between them (which counts as nothing) and the result is the
+same as the non-doubled version.
+
+For C<< ! >>, however, this is not true, and doubling that negates the negation.
 
 =cut
 
