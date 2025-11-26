@@ -10,12 +10,13 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.6.0';                          # https://semver.org/
+our $VERSION='0.6.1';                          # https://semver.org/
 our $VERSION_DATE='26 November 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
-Usage: $PROGRAM [OPTION]... [--] [QUERY] [FIELD=VALUE]... [FILE]
+Usage: $PROGRAM [OPTION]... [--] QUERY [FIELD=VALUE]... [FILE]
+       $PROGRAM [OPTION]... -eQUERY... [--] [FIELD=VALUE]... [FILE]
 Manipulate ZDB database.
 
       --color[=WHEN]      When to highlight matches (default: 'auto')
@@ -602,10 +603,10 @@ my %opt = (
 @ARGV = map { decode } @ARGV;
 while (@ARGV) {
     local $_ = shift;
-    /^-/ or do { push(@arg, $_); next };  # non-option = QUERY
-    # NOTE! Shortopts w/o args in here!
+    /^ -.                       /x or  do { push(@arg, $_); next }; # non-opt
+    # NOTE! Shortopts with args must be in (negated) character class below!
     s/(?<=^-[^-e]).+//x            and unshift(@ARGV, "-$&"); # bundled opts
-    /^        --               $/x and do { push(@query, @ARGV);        last };
+    /^        --               $/x and do { push(@arg, @ARGV);          last };
     /^ -c                      $/x and do { $opt{color} = 1;            next };
     /^ -C                      $/x and do { $opt{color} = 0;            next };
     /^        --colou?r(=(.*))?$/x and do { $opt{color} = whenarg($2);  next };
@@ -627,16 +628,19 @@ while (@ARGV) {
 $opt{man}  and manpage();
 $opt{test} and do { Query::test(); exit };
 $out       and do { print $out;    exit };
-if (not @query) {                              # get QUERY (unless -e used)
+die "Only one FILE may be specified.\n" if @arg > 2;
+if (-t STDIN) {                                # get FILE
+    die "No FILE specified.\n"                         if @arg == 0;
+    die "FILE is '-' but no standard input to read.\n" if $arg[$#arg] eq '-';
+    die "FILE '$arg[$#arg]' does not exist.\n"         if not -e $arg[$#arg];
+    ($opt{file}) = pop @arg;
+} else {                                       # read STDIN
+    pop @arg if (@arg && $arg[$#arg] eq '-');
+    die "Specify either FILE or standard input, not both.\n" if @arg > 1;
+}
+if (not @query) {                              # get QUERY (unless got from -e)
     die "No QUERY specified.\n" if @arg == 0;
     @query = shift(@arg);
-}
-if (-t STDIN) {                                # get FILE
-    die "No FILE specified.\n" if @arg == 0;
-    die "Too many FILEs specified.\n" if @arg > 1;
-    ($opt{file}) = @arg;
-} else {
-    die "Specify either FILE or standard input.\n" if @arg > 0;
 }
 
 # FIXME: split $opt{pager} (?)
@@ -677,7 +681,13 @@ zdb - Manipulate ZDB database
 
 =head1 SYNOPSIS
 
-B<zdb> [I<OPTION>]... [B<-->] [I<QUERY>] [I<FIELD>B<=>I<VALUE>]... [I<FILE>]
+=over 1
+
+=item B<zdb> [I<OPTION>]... [B<-->] I<QUERY> [I<FIELD>B<=>I<VALUE>]... [I<FILE>]
+
+=item B<zdb> [I<OPTION>]... B<-e>I<QUERY>... [B<-->] [I<FIELD>B<=>I<VALUE>]... [I<FILE>]
+
+=back
 
 
 =head1 DESCRIPTION
@@ -1116,6 +1126,10 @@ inspired by B<grep>'s option of the same name) but B<grep> actually uses that
 option to specify a file of B<match patterns>, not data! This update brings the
 options in line with how B<grep>, B<sed> and B<awk> (actually) works.
 
+[2025-11-26 15:59-17:37] v0.6.1 - Support for '-' argument. QUERY argument now
+mandatory (until implementing L</No QUERY = Show database status>). Also
+updated usage string to reflect this.
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1346,7 +1360,7 @@ Implement B<recutils> 'record set' field B<%rec>. Record set name should
 probably use the same limitations (and recommendations) as B<recutils> do (see
 'Naming Record Types' in the B<recutils> manual).
 
-=head2 Status command
+=head2 No QUERY = Show database status
 
 Giving an input file, but no I<QUERY> or I<FIELD>B<=>I<VALUE> pairs should give
 a summary of the input file. Summary should include B<%rec> and B<%doc> fields
@@ -1364,6 +1378,11 @@ indicate that the field 'tlh' occurs once in 3033 records, while the field
 
 Should also have a look at what the B<recinf> command outputs for additional
 inspiration.
+
+Also update usage to show that QUERY argument is optional! (Meaning that we
+also only need one usage line instead of two.)
+
+    zdb [OPTION]... [--] [QUERY] [FIELD=VALUE]... [FILE]
 
 =head2 File locking
 
