@@ -1232,7 +1232,7 @@ comments that will be fixed in the future as well.)
 
 =head2 Search in comments
 
-Option to enable/disable searching comment. By default comments should not be
+Option to enable/disable searching comments. By default comments should not be
 searched.
 
 =head2 Smart case matching
@@ -1275,6 +1275,27 @@ matching, but that allows for dates. (Internally translating stuff to epoch
 time and comparing it that way.) Ideally the date comparison should extract and
 parse date in the locale specified for the field (and be able to extract all
 kinds of date formats, from 'December 1, 2020' to '2020-12-01').
+
+=head2 Field locale settings
+
+These locale settings should handle how characters match and are sorted. For
+example, in an English locale one would expect searching for 'a' to also match
+any 'a' with arbitrary diacritics and or case. While in Swedish, 'a' and 'ä'
+would count as separate letters (while 'e' and 'é' would not). In a
+(hypothetical) Klingon locale, 'q' and 'Q' would count differently.
+
+One should be able to have different locale settings for different fields. This
+would kinda complicate queries somewhat, with different regexes having to be
+used for the exact same string depending on locale.
+
+It seems like one cannot interrogate the locale settings to find character
+equivalents. So, maybe adding an B<%alphabet> field to the settings (connected
+to the data type of a field?) which would list all the characters of that
+alphabet. Any accented characters occurring in that set (such as Swedish åäö)
+should be treated as different from the other characters, while any other
+accented character should match the corresponding unaccented one. (That is,
+decompose all characters (with C<NFD()>) and then precompose all accented
+characters from the B<%alphabet> set (with C<NFC()>).
 
 =head2 Option to user pager's highlighting
 
