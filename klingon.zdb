@@ -1,4 +1,4 @@
-#!/bin/env -S sh -c 'exec zdb "$@" "$0"'
+#!/usr/bin/env -S sh -c 'exec zdb "$@" "$0"'
 
 %format		zrajm-database
 %version	1.4
