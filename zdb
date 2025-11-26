@@ -10,19 +10,19 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.5.2';                          # https://semver.org/
-our $VERSION_DATE='25 November 2025';
+our $VERSION='0.6.0';                          # https://semver.org/
+our $VERSION_DATE='26 November 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
-Usage: $PROGRAM [OPTION]... [--] [[%TYPE] [QUERY]... [FIELD=VALUE]...]...
+Usage: $PROGRAM [OPTION]... [--] [QUERY] [FIELD=VALUE]... [FILE]
 Manipulate ZDB database.
 
       --color[=WHEN]      When to highlight matches (default: 'auto')
                           WHEN: 'auto', 'always' or 'never'
   -c                      Always highlight matches (--color=always)
   -C                      Never highlight matches (--color=never)
-  -f, --file=FILE         Specify ZDB input file
+  -e, --match=QUERY       Specify QUERY explicitly (usually omitted)
   -h, --help              Show this help and exit
       --help-query        Show QUERY syntax (it's very googlish)
   -i, --ignore-case       Ignore case when searching (default)
@@ -589,7 +589,7 @@ local %SIG = (
     });
 
 my $out;
-my @query = ();
+my (@arg, @query);
 my %opt = (
     color  => -t STDOUT,
     file   => undef,
@@ -602,14 +602,14 @@ my %opt = (
 @ARGV = map { decode } @ARGV;
 while (@ARGV) {
     local $_ = shift;
-    /^-/ or do { push(@query, $_); next };  # non-option = QUERY
+    /^-/ or do { push(@arg, $_); next };  # non-option = QUERY
     # NOTE! Shortopts w/o args in here!
-    s/(?<=^-[^-f]).+//x            and unshift(@ARGV, "-$&"); # bundled opts
+    s/(?<=^-[^-e]).+//x            and unshift(@ARGV, "-$&"); # bundled opts
     /^        --               $/x and do { push(@query, @ARGV);        last };
     /^ -c                      $/x and do { $opt{color} = 1;            next };
     /^ -C                      $/x and do { $opt{color} = 0;            next };
     /^        --colou?r(=(.*))?$/x and do { $opt{color} = whenarg($2);  next };
-    /^(-f(.*)|--file  (=(.*))?)$/x and do { $opt{file} = $2||$4//shift; next };
+    /^(-e(.*)|--match (=(.*))?)$/x and do { push @query, $2||$4//shift; next };
     /^(-h    |--help          )$/x and do { $out = $USAGE;              next };
     /^(       --help-query    )$/x and do { $out = $QUERY;              next };
     /^(-i    |--ignore-case   )$/x and do { $opt{nocase} = 1;           next };
@@ -627,13 +627,26 @@ while (@ARGV) {
 $opt{man}  and manpage();
 $opt{test} and do { Query::test(); exit };
 $out       and do { print $out;    exit };
+if (not @query) {                              # get QUERY (unless -e used)
+    die "No QUERY specified.\n" if @arg == 0;
+    @query = shift(@arg);
+}
+if (-t STDIN) {                                # get FILE
+    die "No FILE specified.\n" if @arg == 0;
+    die "Too many FILEs specified.\n" if @arg > 1;
+    ($opt{file}) = @arg;
+} else {
+    die "Specify either FILE or standard input.\n" if @arg > 0;
+}
 
 # FIXME: split $opt{pager} (?)
 $pager_pid = open(STDOUT, '|-', $opt{pager})   # send all STDOUT through pager
     or die "Can't exec '$opt{pager}': $!\n"    #   (if enabled)
     if $opt{paging};
 
-my $query = new Query("@query");
+# If there are multiple queries, the were gotten by -e and should be OR:ed.
+# FIXME: Parse each query separately (to resolve unfinished parens etc) then join.
+my $query = new Query(join(',', @query));
 my $zdb = new ZDB($opt{file});
 while (my ($prespace, @field) = $zdb->read_record()) {
 
@@ -664,7 +677,7 @@ zdb - Manipulate ZDB database
 
 =head1 SYNOPSIS
 
-B<zdb> [I<OPTION>]... [B<-->] [[I<QUERY>]... [I<FIELD>B<=>I<VALUE>]...]...
+B<zdb> [I<OPTION>]... [B<-->] [I<QUERY>] [I<FIELD>B<=>I<VALUE>]... [I<FILE>]
 
 
 =head1 DESCRIPTION
@@ -731,10 +744,16 @@ Enable highlighting. Short for B<--color=always>.
 
 Disable highlighting. Short for B<--color=never>.
 
-=item B<-f>I<FILE>, B<--file=>I<FILE>
+=item B<-e>I<QUERY>, B<--match=>I<QUERY>
 
-Read input from given I<FILE>, without this option, input is read from standard
-input. (TODO: See L</Atomic file updates>; Option from B<grep>.)
+Specify I<QUERY> explicitly. Useful when you don't want to put I<QUERY> as the
+first argument, or in a situation where I<QUERY> might start with C<-> and be
+interpreted as an option. (You can protect your I<QUERY> against this in other
+ways too, for example by prefixing it with C<,> or using the B<--> option.)
+
+If this option is repeated, the I<QUERY>(s) are OR:ed together. This means that
+a record will be considered matching if one (or more) of the I<QUERY>(s) match.
+(Short option from B<grep>, B<sed>, B<awk>; long option from B<ack>.)
 
 =item B<-h>, B<--help>
 
@@ -943,31 +962,32 @@ inside the B<zdb> source code itself (and is fairly readable).
 
 =head2 'Self-searchable' ZDB databases
 
-One may create 'self-searchable' ZDB database, which can be invoked as if the
-database itself was the B<zdb> executable. For example, my Klingon dictionary
-is called F<klingon.zdb>, and to search for the word 'phaser' I can simply
-write:
+One may create 'self-searchable' ZDB database, which can be invoked by using
+the database file itself as a command. For example, my Klingon dictionary is
+called F<klingon.zdb>, and to search for the word 'phaser' I can simply write:
 
      ./klingon.zdb phaser
 
-To achieve this, the add an initial shebang (C<#!>) to your database which
-points to the B<zdb> executable. This line also needs to contain the B<zdb>
-option B<-f> (or B<--file>), and (given that B<zdb> resides in your F</bin>
-directory) may look like this:
+To achieve this, a (relatively complicated) shebang (C<#!>) line needs to be
+added to the top of the database file. This shebang invokes B<zdb>, and
+rearranges the arguments so that name of the database file occurs last in the
+command. The following B<shebang> can be used:
 
-    #!/bin/zdb -f
+    #!/bin/env -S sh -c 'exec zdb "$@" "$0"'
 
-Or, if you don't want to provide the full path to B<zdb>, but you know that it
-will be found in one of the directories in your B<$PATH> environment variable,
-you can use the following shebang line. (Using B<env> is also necessary if you
-want to provide additional options B<zdb>. Just make sure that the
-B<-f>/B<--file> option is the very last one on the line.)
+For the above to work B<zdb> needs to be somewhere in your B<$PATH>.
 
-    #!/bin/env -S zdb -f
+As the shebang command is invoked the first argument (B<$0>) is the name of the
+B<zdb> database file (in which the shebang line is found). If we did not invoke
+B<sh> to flip the arguments around, B<$0> would have been given as the first
+argument (which would've caused B<zdb> to throw an error).
 
-Finally, the B<zdb> file needs to be executable for this to work.
+The database file also needs to be executable for this to work.
 
     chmod +x ZDBFILE
+
+Now, 'executing' the database will pass all arguments given as-is to B<zdb>,
+with the name of the database file tucked onto the end of the command line.
 
 
 =head1 ENVIRONMENT
@@ -999,9 +1019,9 @@ when searching in B<less>).
 
 The only file read by B<zdb> is the inputted ZDB database file. Currently all
 output is written to standard output, but this B<will change>. In the future a
-file specified with the B<--file=>I<FILE> option will be modified when
-inserting or deleting fields or records. Like now, when the ZDB database is
-given on standard input, modified content will be written to standard output.
+file specified on the command line will be modified when inserting or deleting
+fields/records. Like now, when the ZDB database is given on standard input,
+modified content will be written to standard output.
 
 
 =head1 CAVEATS
@@ -1089,6 +1109,12 @@ DESCRIPTION, QUERIES (subchapters 'Logic Operators', 'Field Prefixes' and
 
 [2025-11-25 12:31-12:36] v0.5.2 - Moved END {} block to after info variables.
 
+[2025-11-25 02:14-04:57, 11:37-12:56, 17:29-18:01], [2025-11-26 15:08-15:59]
+v0.6.0 - Added B<-e>/B<--match> option and removed B<-f>/B<--file> option.
+B<--file> was used to specify a database input file (mentioned as being
+inspired by B<grep>'s option of the same name) but B<grep> actually uses that
+option to specify a file of B<match patterns>, not data! This update brings the
+options in line with how B<grep>, B<sed> and B<awk> (actually) works.
 
 
 =head1 COPYRIGHT AND LICENSE
@@ -1203,6 +1229,11 @@ Maybe add b<-s>/B<--smart-case> and b<-S>/B<--no-smart-case>. This option
 should override (and be overridden by) B<--ignore-case> and
 B<--no-ignore-case>.
 
+=head2 Record set matching
+
+There should be a way to match only entries in a specified record set. Maybe
+prefix B<%rec:…>?
+
 =head2 Number matching
 
 Use C<[…]> to match numbers. The brackets themselves will match a number in the
@@ -1241,12 +1272,12 @@ about fields containing explicit newlines? (Like an address, or poetry?)
 =head2 Atomic file updates
 
 Currently data is always output to standard output, regardless of whether it
-was read from standard input, or from file specified with the B<--file=>I<FILE>
-option. In the future, input on stdin should result in output to stdout, but
-using B<--file=>I<FILE> should result in the ZDB being atomically updated. A
-tempfile is written (next to the input file, e.g. with the name
-'B<.>I<FILE>B<.tmp>'). Upon successful outputting of this file, is renamed
-to replace the old file.
+was read from standard input, or from file specified on the command line. In
+the future, input on standard input will result in output to standard output,
+while files given on the command line will be (atomically) modified when
+inserting or deleting fields/records. A tempfile will be written next to the
+input file (for example, with the name 'I<FILE>B<.tmp>'). Then, if the
+modification is successful the file will be is renamed to replace the old file.
 
 =head2 Inserting new records
 
