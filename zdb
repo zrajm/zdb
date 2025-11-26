@@ -10,7 +10,7 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.6.2';                          # https://semver.org/
+our $VERSION='0.6.3';                          # https://semver.org/
 our $VERSION_DATE='26 November 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -696,7 +696,7 @@ B<zdb> is a utility for searching and manipulating human-readable text-based
 database files (in ZDB format).
 
 A I<FILE> of C<-> stands for standard input. When receiving input on standard
-input B<zdb> acts like a text filter (outputting the results to standard
+input, B<zdb> acts like a text filter (outputting the results to standard
 output). When a (non C<->) I<FILE> is specified, that file is updated
 (atomically) on success.
 
@@ -836,7 +836,7 @@ Never use pager. (Short for B<--paging=never>; Option inspired by B<bat>.)
 Run built-in unit tests. Tests are run using Perl's standard B<Test::More>
 module. However, the module is loaded at runtime, rather than (the way it is
 normally done) at compile time---This is to avoid impacting the load time of
-normal use of the program (when the the B<--test> option isn't used).
+normal use of the program (when the B<--test> option isn't used).
 
 =item B<--version>
 
@@ -931,14 +931,14 @@ taken literally. (C<d'armond> will thus match all occurrences said name.)
 
 All characters inside quotes are taken literally. If you want to search for a
 word or phrase that contains special characters (like parentheses, an asterisk,
-or spaces) but them inside quotes. (C<phaser pistol> will find records
+or spaces) put them inside quotes. (C<phaser pistol> will find records
 containing both the words 'phaser' and 'pistol', while C<"phaser pistol"> will
 find all occurrences of the phrase "phaser pistol".)
 
-Quotes can begin and end anywhere, and so to search for a phrase where one may
-vary use something like B<C<"the "*" of">>. The only exception to this is that
-two quotes in a row (regardless of whether it occurs inside or outside of a
-quote) will match a literal quote.
+Quotes can begin and end anywhere, and so to search for a phrase where one word
+may vary use something like B<C<"the "*" of">>. The only exception to this is
+that two quotes in a row (regardless of whether it occurs inside or outside of
+a quote) will match a literal quote.
 
 
 =head1 RETURN VALUE
@@ -991,10 +991,10 @@ command. The following B<shebang> can be used:
 
 For the above to work B<zdb> needs to be somewhere in your B<$PATH>.
 
-As the shebang command is invoked the first argument (B<$0>) is the name of the
-B<zdb> database file (in which the shebang line is found). If we did not invoke
-B<sh> to flip the arguments around, B<$0> would have been given as the first
-argument (which would've caused B<zdb> to throw an error).
+As the shebang command is invoked, the first argument (B<$0>) is the name of
+the B<zdb> database file (in which the shebang line is found). If we did not
+invoke B<sh> to flip the arguments around, B<$0> would have been given as the
+first argument (which would've caused B<zdb> to throw an error).
 
 The database file also needs to be executable for this to work.
 
@@ -1067,8 +1067,8 @@ whitespace between records (and at the beginning & ending of file).
 [2025-11-11 15:26-16:11, 19:45-21:31] & [2025-11-12 00:04-03:28, 05:02-07:12]
 [2025-11-14 01:03-06:30, 18:10-11:42] v0.1.0 - Defined internal query format,
 and internal data format. File now loads into the new format loading.
-Implemented search (using a simple hardcoded query). Added hiliting of search
-result (including overlapping matches).
+Implemented search (using a simple hardcoded query). Added highlighting of
+search result (including overlapping matches).
 
 [2025-11-14 11:42-12:22] v0.1.1 - Documented internals somewhat.
 
@@ -1088,13 +1088,13 @@ manpager) when there are errors. Extensive rewrite of docs.
 module.
 
 [2025-11-18 19:26-19:39] v0.3.2 - Now gets QUERY from command line arguments.
-Very basic, all arguments a simply AND:ed, and each pattern is expected to
+Very basic, all arguments are simply AND:ed, and each pattern is expected to
 match a whole word (with no wildcards or anything).
 
 [2025-11-18 19:39-21:21] v0.3.3 - Added B<--paging> option.
 
 [2025-11-18 21:21-21:42] v0.3.4 - Tested/verified and documented the B<$PAGER>
-and B<--pager=>I<CMD> capabilities. (Yes, Perl allow more complex commands to
+and B<--pager=>I<CMD> capabilities. (Yes, Perl allows more complex commands to
 be used.)
 
 [2025-11-19 00:04-01:01] v0.4.0 - Added B<ZDBPAGER> for B<zdb>-specific pager
@@ -1136,6 +1136,8 @@ updated usage string to reflect this.
 
 [2025-11-26 18:46-18:59] v0.6.2 - Documentation proofreading & fixes.
 
+[2025-11-26 18:59-19:20] v0.6.3 - Additional manpage spellfixes.
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1152,10 +1154,10 @@ law. (See also C<zdb --version>.)
 =head1 SEE ALSO
 
 B<zdb> is partly inspired by GNU Recutils. -- When I first heard about Recutils
-I was delighted to find that its file format it strikingly similar to the
+I was delighted to find that its file format it is strikingly similar to the
 plain-text 'database' format I've used for my Klingon dictionary since the very
 end of the last century (see L<https://klingonska.org/dict/dict.zdb>). I was to
-a large degree inspired by the shortcomings of Recutils -- it's query language
+a large degree inspired by the shortcomings of Recutils -- its query language
 is verbose and pretty inflexible (I felt I could do better!), and Recutils does
 not highlight matches.
 
@@ -1166,14 +1168,14 @@ Hence, this little project! :)
 
 =head2 Internal Query Format
 
-Internally query tree structure, consisting is a nested lists, where the leaves
+Internally query tree structure, consisting of a nested list, where the leaves
 are functions. These matcher functions are called for each field/value pair,
 and aggregated. When not matching they should return the empty list, and when
 matching they return the field and value pair again, with possible highlights
-(achieved using ANSI escape code for inverting '\e7m...\e[27m'). When a matcher
-function is called without arguments, it should return data about itself (exact
-format to be decided) -- this is to allow for creating a cleaned-up version of
-the original query by traversing the tree.
+(achieved using ANSI escape code for inverting '\e[7m...\e[27m'). When a
+matcher function is called without arguments, it should return data about
+itself (exact format to be decided) -- this is to allow for creating a
+cleaned-up version of the original query by traversing the tree.
 
 The root node of the tree is always OR:ed, and nodes inside that are AND:ed,
 and those inside those are OR:ed etc.
@@ -1272,7 +1274,7 @@ time and comparing it that way.) Ideally the date comparison should extract and
 parse date in the locale specified for the field (and be able to extract all
 kinds of date formats, from 'December 1, 2020' to '2020-12-01').
 
-=head2 Option to user pager's hiliting
+=head2 Option to user pager's highlighting
 
 Add option to, instead of highlighting the output, use pager options for the
 highlighting. When using B<less> as a pager, for example, this would involve
@@ -1309,7 +1311,7 @@ database.
 =head2 Inserting fields into existing records
 
 When I<FIELD>B<=>I<VALUE> pairs arguments are given, and a I<QUERY> is present
-on the command line, the data should be inserted into the first(?) matching as
+on the command line, the data should be inserted into the first(?) matching
 record.
 
 =head2 Record and field sorting
@@ -1356,7 +1358,7 @@ pager for short output (shorter than a screenful?).
 =head2 Show manpage using B<$MANPAGER>
 
 The B<--manual> option should use the B<$MANPAGER> environment variable to
-determine how do display its manpage. Currently B<man -l -> is used to display
+determine how to display its manpage. Currently B<man -l -> is used to display
 the manpage, but to allow for B<$MANPAGER> the manpage should be written to
 tempfile and the manpager should be invoked as C<$MANPAGE FILE> (where I<FILE>
 is a path beginning with '.' or '/').
@@ -1419,7 +1421,7 @@ and use z85 encoding (this is great because it avoids characters like B<">,
 B<'> etc which makes it (relatively) easy to include in JSON without having to
 escape stuff).
 
-The Debian package B<coreutils> come with B<basenc> which can be used for z85
+The Debian package B<coreutils> comes with B<basenc> which can be used for z85
 encoding. (Encode with C<basenc --z85>, decode with C<basenc --z85 -d>.)
 
 =over 12
