@@ -10,7 +10,7 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.6.1';                          # https://semver.org/
+our $VERSION='0.6.2';                          # https://semver.org/
 our $VERSION_DATE='26 November 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -670,7 +670,7 @@ while (my ($prespace, @field) = $zdb->read_record()) {
 __END__
 
 FIXME: See 'man pod2man' & 'man perlpodstyle' for a list of all sections that
-should be included in a man page.
+should be included in a manpage.
 
 =encoding utf8
 
@@ -742,9 +742,11 @@ piped the output to another command (S<C<| CMD>>) or directed it to a file
 
 =back
 
-Using B<--color> (without I<WHEN>) means B<--color=always>; not using
-B<--color> means B<--color=auto>. (See also B<-c> and B<-C>; Option from
-B<grep>/B<ls>, but the alias forms of I<WHEN> are only used by B<ls>.)
+Using B<--color> (without I<WHEN>) means B<--color=always>; omitting the option
+altogether means B<--color=auto>. (See also B<-c> and B<-C>.) (Option inspired
+by B<grep>/B<ls> with semantics matching B<ls>, that is, using option without
+arg means B<--color=always>, and I<WHEN> values B<yes>/B<force>, B<no>/B<none>
+and B<tty>/B<if-tty> are only supported by B<ls>, not B<grep>.)
 
 =item B<-c>
 
@@ -763,7 +765,7 @@ ways too, for example by prefixing it with C<,> or using the B<--> option.)
 
 If this option is repeated, the I<QUERY>(s) are OR:ed together. This means that
 a record will be considered matching if one (or more) of the I<QUERY>(s) match.
-(Short option from B<grep>, B<sed>, B<awk>; long option from B<ack>.)
+(Short option inspired by B<grep>, B<sed>, B<awk>; long option by B<ack>.)
 
 =item B<-h>, B<--help>
 
@@ -777,19 +779,20 @@ Display a cheat sheet for the QUERY syntax. (See also L</QUERIES> below).
 
 Ignore case distinctions when searching. (This is the default.) This option is
 useful to override any previously given B<--no-ignore-case> on the same command
-line. (Option from B<grep>.)
+line. (Option inspired by B<grep>.)
 
 =item B<-I>, B<--no-ignore-case>
 
 Consider case distinctions when searching. By default search is
-case-insensitive, use this option to override that. (Option from B<grep>.)
+case-insensitive, use this option to override that. (Option inspired by
+B<grep>.)
 
 =item B<-M>, B<--manual>
 
 Display the B<zdb> manual page (with B<man>). The manual page is included in
 the 'binary' itself (a Perl program) in the form of Perl-style POD
-documentation. (TODO: See L</Show manpage using B<$MANPAGER>>; Option from
-B<curl>.)
+documentation. (TODO: See L</Show manpage using B<$MANPAGER>>; Option inspired
+by B<curl>.)
 
 =item B<--pager=>I<CMD> (default: B<pager>)
 
@@ -802,8 +805,8 @@ will also pass through the pager, if it is enabled.)
 
 The default command used is B<pager> (which in points to B<less> in many Linux
 distros). The B<--pager> option overrides any B<$ZDBPAGER> or B<$PAGER>
-environment variable setting. (See also L</ENVINORMENT>: 'B<$ZDBPAGER>,
-B<$PAGER>'; Option from B<man>/B<bat>/B<delta>.)
+environment variable setting. (See also L</ENVIRONMENT>: 'B<$ZDBPAGER>,
+B<$PAGER>'; Option inspired by B<man>/B<bat>/B<delta>.)
 
 B<RECOMMENDED:> Add the line C<export ZDBPAGER='less -RFXi'> to your shell's
 init file. This will set the B<less> options B<-R> (allow color highlighting),
@@ -818,7 +821,7 @@ Whether to use a pager for the output.
 I<WHEN> may be: B<auto>, B<always> or B<never> (and works the same as for
 B<--color>). Using B<--paging> (without I<WHEN>) means B<--paging=always>; not
 using B<--paging> means B<--paging=auto>. (See also B<--pager=>I<CMD>, B<-p>
-and B<-P>; Option from B<bat>/B<delta>.)
+and B<-P>; Option inspired by B<bat>/B<delta>.)
 
 =item B<-p>
 
@@ -826,7 +829,7 @@ Always use pager. (Short for B<--paging=always>.)
 
 =item B<-P>
 
-Never use pager. (Short for B<--paging=never>; Option from B<bat>.)
+Never use pager. (Short for B<--paging=never>; Option inspired by B<bat>.)
 
 =item B<--test>
 
@@ -873,7 +876,7 @@ Boolean operators are also supported:
     │  Character   │  Used For  │  From the most tightly binding, to the
     ├──────────────┼────────────┤  least binding.
     │  :  (colon)  │  prefix    │
-    ├──────────────┼────────────┤  Thus: '-a:b, -c d' = '-(a:b), (-c d)'.
+    ├──────────────┼────────────┤  Thus: '-a:b, -c d' = '(-(a:b)), (-c d)'.
     │  -  (minus)  │  not       │
     ├──────────────┼────────────┤
     │  ␣  (space)  │  and       │
@@ -899,15 +902,16 @@ Since B<:> is so tightly binding, however, parentheses are required around each
 I<FIELD> and I<VALUE> containing a complex expression.
 (C<(name,alias):anderson> will find 'anderson' in either 'name' or 'alias'.)
 
-When multiple I<VALUE>s are chained together (…B<:>I<VALUE>B<:>I<VALUE>), each
-subsequent I<VALUE> is only sought after in fields that have matched all of the
-previous I<VALUE>(s) in the chain. (Thus, C<name:magnus:anderson> will match
-all 'name' fields which contain B<both> 'magnus' and 'anderson', and
+When multiple I<VALUE>s are chained together (…B<:>I<VALUE>B<:>I<VALUE>),
+matching of subsequent I<VALUE> are only attempted in fields that have matched
+the previous I<VALUE>(s) in the chain. (Thus, C<name:magnus:anderson> will
+match all 'name' fields which contain B<both> 'magnus' and 'anderson', and
 C<(name,alias):magnus:anderson> will match 'name' or 'alias' fields that
 contain B<both> 'magnus' and 'anderson' B<in the same field>.)
 
-C<name:> (without a value) will match all fields by than name (regardless of
-value).
+I<FIELD:> (without a value) will match all fields with the specified name
+(regardless of value. (C<(name,alias):> will match all records that contain
+either a field called 'name' or 'alias'.)
 
 
 =head2 Quoting
@@ -1130,6 +1134,8 @@ options in line with how B<grep>, B<sed> and B<awk> (actually) works.
 mandatory (until implementing L</No QUERY = Show database status>). Also
 updated usage string to reflect this.
 
+[2025-11-26 18:46-18:59] v0.6.2 - Documentation proofreading & fixes.
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1215,7 +1221,8 @@ depending on the amount of whitespace used between the field name and value.
 
 =head1 FUTURE
 
-Below are some planned future features.
+Below are some planned future features. (Some section has separate FIXME
+comments that will be fixed in the future as well.)
 
 =head2 Read QUERY arguments
 
