@@ -10,8 +10,8 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.6.4';                          # https://semver.org/
-our $VERSION_DATE='26 November 2025';
+our $VERSION='0.6.5';                          # https://semver.org/
+our $VERSION_DATE='29 November 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -1140,6 +1140,8 @@ updated usage string to reflect this.
 
 [2025-11-26 19:20-19:23] v0.6.4 - Corrected B</bin/env> -> B</usr/bin/env>.
 
+[2025-11-29 00:13-00:25] v0.6.5 - Added note about hierarchical fields to FUTURE.
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1520,7 +1522,7 @@ names should probably be shorter). Or maybe use some other scheme? (Like using
 I<FIELD>B<=>I<VALUE> pairs with empty value to remove a field---though that
 might be better reserved for setting a field, but leaving it empty.)
 
-=head2 YAML support for database
+=head2 Hierarchical fields
 
 Each record would be what YAML calls a 'document' (separated by C<---> on a
 line of its own). This also requires support for more complicated data
@@ -1528,6 +1530,16 @@ structures (necessitating hierarchical field names). YAML also have alias
 support, and a string like C<false> will, if unquoted, be interpreted
 differently depending on schema. So schemas need to be in place for this to be
 implementable (see https://spacelift.io/blog/yaml).
+
+NO. YAML isn't very nice because of its complicated string escaping syntax, and
+also because it doesn't allow for repeated fields.---BUUT a structure that
+allows for fields within fields would be very nice. For example, one could
+imaging having a musical album database, which could then either have an
+'artist' field for the entire album, or (in the instances where this is
+relevant) for each song. Also, there should then be a way to define that I want
+to search 'song' and 'artist' fields, but only when they apply to the same song
+(using the album's 'artist', if the song does not have an artist field of its
+own).
 
 =head2 Boolean operator aliases
 
