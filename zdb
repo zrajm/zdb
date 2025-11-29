@@ -9,8 +9,10 @@ use warnings  qw(FATAL utf8);    # fatalize encoding glitches
 use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
+my %opt;
+
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.6.5';                          # https://semver.org/
+our $VERSION='0.7.0';                          # https://semver.org/
 our $VERSION_DATE='29 November 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -34,6 +36,7 @@ Manipulate ZDB database.
   -p                      Always use pager (--paging=always)
   -P                      Never use pager (--paging=never)
       --test              Run built-in unit tests
+  -v, --verbose           Show debugging output while running
       --version           Show version and exit
 
 QUERY arguments are joined (with space) before being parsed. If FIELD=VALUE
@@ -198,24 +201,6 @@ sub quotefunny {
     return $_;
 }
 
-sub stringify_hashref {
-    my ($x) = @_;
-    my $txt = join('', map { "$_: $x->{$_}\n" } keys %$x);
-    $txt =~ s#^#  #mg;
-    return "{\n$txt}\n";
-}
-
-sub stringify_query {
-    my ($query) = @_;
-    return stringify_hashref($query->()) if ref($query) eq 'CODE';
-    if (ref($query) eq 'ARRAY') {
-        my $txt = join('', map { stringify_query($_) } @$query);
-        $txt =~ s#^# · #mg;
-        return "[\n$txt]\n";
-    }
-    die "Error in query " . ref($query);
-}
-
 # my $record = record(<<~"END_RECORD");
 #     country	Greenland
 #     name	Anders Grönroot
@@ -265,7 +250,6 @@ sub record {
     }
 
     # Final record will have only space, no data.
-    use Data::Dumper;
     sub read_record {
         my ($self) = @_;
         my ($spc, $txt) = splice(@{$self->{rec}}, 0, 2);
@@ -299,6 +283,59 @@ sub record {
 ###############################################################################
 
 {
+    package Query::Stack;
+    my %paren = ( # define query parentheses
+        and => sub { [{type => 'and', not => '', or => '', field => ''}] },
+        or  => sub { [{type => 'or',  not => '', or =>  1, field => ''}] },
+        OR  => sub { [{type => 'OR',  not => '', or =>  1, field => ''}] },
+        NOR => sub { [{type => 'NOR', not =>  1, or =>  1, field => ''}] },
+    );
+    sub new {
+        my ($class, $query_str) = @_;
+        my $self = [[]];
+        return bless($self, $class);
+    }
+    sub push {
+        my ($self, @thing) = @_;
+        for (@thing) {
+            $_ = $paren{$_}() if $paren{$_};        # expand 'and', 'or' etc.
+            push(@{$self->[-1]}, $_);               # add to query
+            push(@$self, $_) if ref($_) eq 'ARRAY'; # push parenthesis to stack
+        }
+        return $self;
+    }
+    sub state { return shift()->peek()->[-1] } # current word state
+    sub peek  { return shift()->[-1]         } # get last entry (w/o remove)
+    sub pop {                                  # get last entry (and remove)
+        my ($self, $num) = @_;
+        # Popping one level too many, should wrap whole query in new
+        # parenthesis. (Making too many ')' a non-issue.)
+        #
+        # FIXME: When is the right time to trigger this? Also, how does
+        # stack length relate to the $num argument?
+        if (@$self == 3) {
+            my $query = $self->[0][0];
+
+            # Wrap query (i.e. 1st element of stack) in a parenthesis. (If
+            # outermost parenthesis in query is OR, use AND, and vice versa.)
+            my $paren = $query->[0];
+            my $wrap  = $paren->{or} ? $paren{and}() : $paren{or}();
+            CORE::push(@$wrap, $query);
+
+            # FIXME: Currently stack is `[[QUERY], stack1, stack2, etc]`. If
+            # `[QUERY]` is replaced by plain `QUERY`. We could just unshift the
+            # wrapper into place `unshift(@$stack, $wrap)` (let the old query
+            # entry become the first item on the stack, not having to do the
+            # `splice()` business below).
+            $self->[0][0] = $wrap;                # insert wrapped query
+            splice(@$self, 1, 0, $query);         # put stack reference in
+        } else {
+            pop @$self for 1 .. $num // 1;
+        }
+        return $self;
+    }
+}
+{
     package Query;
     #            or
     #            |and and
@@ -306,13 +343,182 @@ sub record {
     #my $query = [[], []];
     sub new {
         my ($class, $query_str) = @_;
-
-        # FIXME: actually parse query
-        my $query = [[
-            map { match_value_regex(qr/\b$_\b/i) } split(/\s+/, $query_str)
-        ]];
+        my $query = _cleanup(_parse($query_str)) // [];
         my $self = { query => $query };
         return bless($self, $class);
+    }
+
+    # FIXME: Turn parsed query into (recursive) matcher function.
+    # my $query = [[
+    #     map { match_value_regex(qr/\b$_\b/i) } split(/\s+/, $query_str)
+    # ]];
+
+    sub debug {
+        my ($x, $seen) = @_;
+        use Carp;
+        confess "Too many args\n" if @_ > 2;
+        confess "2nd arg (if given) must be hashref, not '$seen'\n"
+            if defined($seen) and ref($seen) ne 'HASH';
+        return 'undef' if not defined($x);     # UNDEF
+        use Scalar::Util qw(blessed reftype);
+        local $_ = reftype $x;
+        if (not defined $_) {                  # SCALAR
+            use warnings FATAL => 'numeric';   #   for eval {}
+            no warnings 'void';
+            return eval { $x + 0; 1 } ? $x : "'$x'";
+        }
+        return "↻$_" if $seen->{$x}++;           # CYCLIC REFERENCE
+        my $class = blessed($x);
+        my $out =
+            # Speeechal array metadata in first element.
+            # and(..) or(...) parentheses
+            /^HASH$/ && exists($x->{plain}) ?                 # search string
+                ($x->{not}   ? '-' : '')
+                . ($x->{field} ? '=' : '')
+                . ($x->{plain} ? "'$x->{plain}'" : '∅') :
+            /^ARRAY$/ && ref($x->[0]) eq 'HASH' && exists($x->[0]{type}) ?
+              "$x->[0]{type}(" . join(', ', map debug($_, $seen), @$x[1..$#$x]) . ')' :
+            /^ARRAY$/    ? '['  . join(', ', map debug($_, $seen), @$x) . ']' :
+            /^HASH$/     ? '{ ' . join(', ', map {
+                /^_/ || !$x->{$_} ? () :        # SKIP FALSY VALUES + _KEYS
+                    (/^[a-z_]\w*$/iu ? $_ : "'$_'")
+                    . ":"
+                    . debug($x->{$_}, $seen);
+            } sort keys %$x). ' }' :
+            /^CODE$/     ? 'sub {}' :
+            /^GLOB$/     ? $$x :
+            /^REGEXP$/   ? do { undef $class;
+                                $x =~ /^\(\?\^(\w*):(.*)\)$/ ? "qr/$2/$1" : "qr/$x/";
+                            } :
+            /^VSTRING$/  ? 'v' . join('.', map { ord } $$x =~ /\X/gu) :
+            /^(FORMAT|IO)$/ ? sub { undef $class;
+                                  for (sort keys %main::) {
+                                      my $v = $main::{$_};
+                                      return "*$_\{$&\}"
+                                          if !ref($v) && *$v{$&} && *$v{$&} == $x;
+                                  }
+                                  return "*$&*";
+                              }->() :
+            /^(LVALUE|REF|SCALAR)$/ ? debug($$x, $seen) :
+            '???';
+        return !defined($class) ? $out :
+            $class eq "Query::Stack" ? $out :
+            $class eq "Query"        ? $out :
+            "bless($out, '$class')";
+    }
+
+    # sub finalizeTerm {
+    #     my ($state) = @_;
+    #     my ($plain, $regex, $field, $not, $wordBeg, $wordEnd)
+    #         = @$state{qw(plain regex field not wordBeg wordEnd)};
+    #     $plain //= '';
+    #     $regex //= '';
+    #     $field //= '';
+    #     $not   //= '';
+    #     my $wordRegex = sub {
+    #         my ($regex) = @_;
+    #         my $noWord = "[ 􌥠,:!?/.’()[\]&+–-]";
+    #         return ($wordBeg ? "(^|$noWord)" : '()')
+    #             . "($regex)"
+    #             . ($wordEnd ? "(?=$noWord|$)" : '');
+    #     };
+    #     return {
+    #         regex => $regex
+    #             ? qr/@{[ $field ? "^${regex}\$" : $wordRegex->($regex) ]}/ui
+    #             : '',
+    #         plain => $plain,
+    #         not   => $not,
+    #     };
+    # }
+
+    sub _parse {
+        my ($query_str) = @_;
+        my sub blank_word {
+            { field => '', not => '', quote => '', _word => [], plain => '' }
+        }
+        my $stack = new Query::Stack();
+        $stack->push('or', 'and', blank_word());
+        my %machine = (
+            '(' => sub {                                                   # DONE
+                my ($state) = @_;
+                $stack->push(($state->{not} ? 'NOR' : 'OR'), 'and', blank_word());
+            },
+            ')' => sub {                                                   # FIXME
+                my ($state) = @_;
+                $stack->pop(2)->push(blank_word());
+            },
+            ',' => sub {                                                   # DONE
+                my ($state) = @_;
+                $stack->pop()->push('and', blank_word());
+            },
+            ' ' => sub { $stack->push(blank_word()) },                     # DONE
+            #':' => sub { my ($s) = @_ },                                  # FIXME
+            '"' => sub { my ($state, $chr) = @_; $state->{quote} = $chr }, # DONE
+            "'" => sub { my ($state, $chr) = @_; $state->{quote} = $chr }, # DONE
+            CHR => sub {                                                   # DONE
+                my ($state, $chr) = @_;
+                if ($state->{quote} eq $chr) { # quoted
+                    $state->{quote} = '';
+                    return;
+                }
+                if (!@{$state->{_word}}) {     # before word
+                    if ($chr eq '-') {         #  '-' negated
+                        $state->{not} = !$state->{not};
+                        return;
+                    } elsif ($chr eq '=') {    #  '=' match whole field
+                        $state->{field} = !$state->{field};
+                        return;
+                    }
+                }
+                $state->{plain} .= $chr;
+                push(@{$state->{_word}}, $chr);
+            },
+        );
+
+        say "STACK: ", debug($stack) if $opt{verbose};
+        for my $chr ($query_str =~ /\X/g) {  # grapheme clusters
+            my $peek  = $stack->peek();
+            my $state = $stack->state();
+            $machine{
+                ($state->{quote} || !exists($machine{$chr})) ? 'CHR' : $chr
+            }($state, $chr);
+            say("----------------------------------------\n",
+                "READ : '$chr'\n",
+                'STACK: ', debug($stack), "\n",
+                'CLEAN: ', debug([[_cleanup($stack->[0][0])]]))
+                if $opt{verbose};
+        }
+        return $stack->[0][0];
+    }
+
+    # FIXME: Push negations downwards/towards tree leaves
+    # Negation Normal Form (NNF) -- needed for highlighting to work
+    sub _cleanup {
+        my ($query) = @_;
+        local $_ = ref($query);
+        # FORMAT: [{metadata}, data1, data2...]
+        if (/^ARRAY$/ and ref($query->[0]) eq 'HASH') { # PARENTHESIS
+            my ($meta, @data) = @$query;
+            @data = map { _cleanup($_) } @data;
+            if (@data == 0) { return () }         #   empty parenthesis
+            if (@data == 1) {                     #   one item parenthesis
+                my ($item) = @data;
+                my ($itemmeta) = ref $item eq 'ARRAY' ? @$item :
+                                 ref $item eq 'HASH'  ?  $item : return $query;
+                # $itemmeta is a ref, so this updates $item.
+                $itemmeta->{not}   = $meta->{not}   ne $itemmeta->{not};
+                $itemmeta->{field} = $meta->{field} ne $itemmeta->{field};
+                return $item;
+            }
+            return [$meta, @data];
+        }
+        # FORMAT: {_word: [...]}
+        if (/^HASH$/) {                           # WORD
+            my %data = %$query;
+            return () if @{$data{_word}} == 0;    #   no word data
+            return $query;
+        }
+        return $query;
     }
 
     # Returns a matcher function. Matcher function takes two args ($field name &
@@ -402,7 +608,6 @@ sub record {
             #say "----------------------------------------";
             my ($pre, $sep, $post) = @{ $field->{space} };
             # say "READ: << '" . quotefunny("$pre$name$sep$value$post") . "'";
-            # print "PROC: ", stringify_hashref($query->());
 
             my @hilited = $query->($name, $value);
             if (@hilited) {
@@ -488,6 +693,14 @@ sub record {
         ok(!recurse($f, [1, 0, 1], 1), "recurse => [1, 0, 1]");
         ok(!recurse($f, [1, 1, 0], 1), "recurse => [1, 1, 0]");
         ok( recurse($f, [1, 1, 1], 1), "recurse => [1, 1, 1]");
+
+        # FIXME: Moar tests.
+        is_deeply(_parse('ab'), [
+            { field => '', not => '', or => 1, type => 'or' }, [
+                { field => '', not => '', or => '', type => 'and' },
+                { _word => [qw/a b/], field => '', not => '', plain => 'ab', quote => '' },
+            ]], "query: 'a'");
+
         done_testing();
     }
 }
@@ -591,7 +804,7 @@ local %SIG = (
 
 my $out;
 my (@arg, @query);
-my %opt = (
+%opt = (
     color  => -t STDOUT,
     file   => undef,
     man    => '',
@@ -599,6 +812,7 @@ my %opt = (
     pager  => $ENV{PAGER} // $ENV{ZDBPAGER} // 'pager',
     paging => -t STDOUT,
     test   => 0,
+    verbose=> '',
 );
 @ARGV = map { decode } @ARGV;
 while (@ARGV) {
@@ -621,6 +835,7 @@ while (@ARGV) {
     /^ -p                      $/x and do { $opt{paging} = 1;           next };
     /^ -P                      $/x and do { $opt{paging} = 0;           next };
     /^(       --test          )$/x and do { $opt{test} = 1;             next };
+    /^(-v    |--verbose       )$/x and do { $opt{verbose} = 1;          next };
     /^(       --version       )$/x and do { $out = version();           next };
     die "Unknown option '$_'.\n";
 }
@@ -651,6 +866,13 @@ $pager_pid = open(STDOUT, '|-', $opt{pager})   # send all STDOUT through pager
 # If there are multiple queries, the were gotten by -e and should be OR:ed.
 # FIXME: Parse each query separately (to resolve unfinished parens etc) then join.
 my $query = new Query(join(',', @query));
+
+say 'FINAL: ', Query::debug([[$query->{query}]]);
+
+__END__
+
+say "----------------------------------------";
+
 my $zdb = new ZDB($opt{file});
 while (my ($prespace, @field) = $zdb->read_record()) {
 
@@ -841,6 +1063,11 @@ normal use of the program (when the B<--test> option isn't used).
 =item B<--version>
 
 Output version information and exit.
+
+=item B<-v>, B<--verbose>
+
+Display a lot of output. This is mostly intended for debugging while developing
+(so far anyway). Do not assume that this option will continue existing.
 
 =back
 
@@ -1141,6 +1368,12 @@ updated usage string to reflect this.
 [2025-11-26 19:20-19:23] v0.6.4 - Corrected B</bin/env> -> B</usr/bin/env>.
 
 [2025-11-29 00:13-00:25] v0.6.5 - Added note about hierarchical fields to FUTURE.
+
+[2025-11-28 18:30-13:45] v0.7.0 - Added some preliminary query parsing and
+started working on tests for the same. Code is currently in a non-functional
+state, as the PARSING is approaching done, but generating the query function
+from the parse tree remains to do be done. Also, the internal representation of
+the parse tree will most likely change.
 
 
 =head1 COPYRIGHT AND LICENSE
