@@ -12,7 +12,7 @@ use charnames qw(:full :short);  # unneeded in v5.16
 my %opt;
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.2';                          # https://semver.org/
+our $VERSION='0.7.3';                          # https://semver.org/
 our $VERSION_DATE='1 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -361,10 +361,10 @@ sub record {
         my $out =
             # Speeechal array metadata in first element.
             # and(..) or(...) parentheses
-            /^HASH$/ && exists($x->{plain}) ?  # search string
+            /^HASH$/ && exists($x->{_word}) ?  # search string
                 ($x->{not}   ? '-' : '')
                 . ($x->{field} ? '=' : '')
-                . ($x->{plain} ? "'$x->{plain}'" : '∅') :
+                . (@{$x->{_word}} ? "'".join('', @{$x->{_word}})."'" : '∅') :
             /^ARRAY$/ && ref($x->[0]) eq 'HASH' && exists($x->[0]{type}) ?
               "$x->[0]{type}(" . join(', ', map debug($_, $seen), @$x[1..$#$x]) . ')' :
             /^ARRAY$/    ? '['  . join(', ', map debug($_, $seen), @$x) . ']' :
@@ -423,7 +423,7 @@ sub record {
     sub _parse {
         my ($query_str) = @_;
         my sub blank_word {
-            { field => '', not => '', quote => '', _word => [], plain => '' }
+            { field => '', not => '', quote => '', _word => [] }
         }
         my $stack = new Query::Stack();
         $stack->push('or', 'and', blank_word());
@@ -459,7 +459,6 @@ sub record {
                         return;
                     }
                 }
-                $state->{plain} .= $chr;
                 push(@{$state->{_word}}, $chr);
             },
         );
@@ -701,7 +700,7 @@ sub record {
             my ($word, %opt) = @_;
             $word //= '';
             my @word = $word =~ /\X/gu;
-            return { 'field' => '', 'plain' => $word, '_word' => \@word, 'quote' => '', 'not' => '', %opt }
+            return { 'field' => '', '_word' => \@word, 'quote' => '', 'not' => '', %opt }
         }
         state sub or  { [{ 'type' => 'or',  'field' => '', 'not' => '', 'or' =>  1 }, @_] }
         state sub and { [{ 'type' => 'and', 'field' => '', 'not' => '', 'or' => '' }, @_] }
@@ -753,7 +752,7 @@ sub record {
             local $TODO = "Feature not yet implemented";
         }
         # Suggested new internal structure. (What does code look like if we do this?)
-        # CHANGED: word type -- remove 'plain', and 'quote', '_word' => nodes.
+        # CHANGED: word type -- remove and 'quote', '_word' => nodes.
         # query_is('ab'), [
         #     {         type => 'or',   field => '', not => '', or =>  1, list => [
         #         {     type => 'and',  field => '', not => '', or => '', list => [
@@ -1444,6 +1443,10 @@ syntax query now works too).
 
 [2025-12-01 23:42-23:50] v0.7.2 - Test callback function now declared using
 `sub {}`.
+
+[2025-12-01 23:54-23:57] v0.7.3 - Remove use of 'plain' object property when
+parsing (& testing) query. (Now use only the '_word' property which is split
+into individual chars.)
 
 
 =head1 COPYRIGHT AND LICENSE
