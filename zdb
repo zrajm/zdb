@@ -12,8 +12,8 @@ use charnames qw(:full :short);  # unneeded in v5.16
 my %opt;
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.0';                          # https://semver.org/
-our $VERSION_DATE='29 November 2025';
+our $VERSION='0.7.1';                          # https://semver.org/
+our $VERSION_DATE='1 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -287,8 +287,7 @@ sub record {
     my %paren = ( # define query parentheses
         and => sub { [{type => 'and', not => '', or => '', field => ''}] },
         or  => sub { [{type => 'or',  not => '', or =>  1, field => ''}] },
-        OR  => sub { [{type => 'OR',  not => '', or =>  1, field => ''}] },
-        NOR => sub { [{type => 'NOR', not =>  1, or =>  1, field => ''}] },
+        nor => sub { [{type => 'nor', not =>  1, or =>  1, field => ''}] },
     );
     sub new {
         my ($class, $query_str) = @_;
@@ -307,30 +306,20 @@ sub record {
     sub state { return shift()->peek()->[-1] } # current word state
     sub peek  { return shift()->[-1]         } # get last entry (w/o remove)
     sub pop {                                  # get last entry (and remove)
-        my ($self, $num) = @_;
-        # Popping one level too many, should wrap whole query in new
-        # parenthesis. (Making too many ')' a non-issue.)
+        my ($self) = @_;
+        pop @$self;
         #
-        # FIXME: When is the right time to trigger this? Also, how does
-        # stack length relate to the $num argument?
-        if (@$self == 3) {
-            my $query = $self->[0][0];
-
-            # Wrap query (i.e. 1st element of stack) in a parenthesis. (If
-            # outermost parenthesis in query is OR, use AND, and vice versa.)
-            my $paren = $query->[0];
-            my $wrap  = $paren->{or} ? $paren{and}() : $paren{or}();
-            CORE::push(@$wrap, $query);
-
-            # FIXME: Currently stack is `[[QUERY], stack1, stack2, etc]`. If
-            # `[QUERY]` is replaced by plain `QUERY`. We could just unshift the
-            # wrapper into place `unshift(@$stack, $wrap)` (let the old query
-            # entry become the first item on the stack, not having to do the
-            # `splice()` business below).
-            $self->[0][0] = $wrap;                # insert wrapped query
-            splice(@$self, 1, 0, $query);         # put stack reference in
-        } else {
-            pop @$self for 1 .. $num // 1;
+        # FIXME: Currently stack is `[[QUERY], stack1, stack2, etc]`. If
+        # `[QUERY]` is replaced by plain `QUERY`. We could just unshift the
+        # wrapper into place `unshift(@$stack, $wrap)` (let the old query entry
+        # become the first item on the stack, not having to do the `splice()`
+        # business below).
+        #
+        # Make stack bottomless (to allow for unmatched ')' in query).
+        if (@$self == 1) {                     # only QUERY left in stack
+            $self->push('or', 'and');          #   add or(and(...)) parentheses
+            $self->push($self->[0][0]);        #   and put QUERY inside that
+            shift(@{$self->[0]});
         }
         return $self;
     }
@@ -367,12 +356,12 @@ sub record {
             no warnings 'void';
             return eval { $x + 0; 1 } ? $x : "'$x'";
         }
-        return "↻$_" if $seen->{$x}++;           # CYCLIC REFERENCE
+        return "↻$_" if $seen->{$x}++;         # CYCLIC REFERENCE
         my $class = blessed($x);
         my $out =
             # Speeechal array metadata in first element.
             # and(..) or(...) parentheses
-            /^HASH$/ && exists($x->{plain}) ?                 # search string
+            /^HASH$/ && exists($x->{plain}) ?  # search string
                 ($x->{not}   ? '-' : '')
                 . ($x->{field} ? '=' : '')
                 . ($x->{plain} ? "'$x->{plain}'" : '∅') :
@@ -441,11 +430,11 @@ sub record {
         my %machine = (
             '(' => sub {                                                   # DONE
                 my ($state) = @_;
-                $stack->push(($state->{not} ? 'NOR' : 'OR'), 'and', blank_word());
+                $stack->push(($state->{not} ? 'nor' : 'or'), 'and', blank_word());
             },
             ')' => sub {                                                   # FIXME
                 my ($state) = @_;
-                $stack->pop(2)->push(blank_word());
+                $stack->pop()->pop()->push(blank_word());
             },
             ',' => sub {                                                   # DONE
                 my ($state) = @_;
@@ -632,7 +621,22 @@ sub record {
     sub test {
         require Test::More;                    # load at runtime
         import Test::More;                     #   (not compile time)
+        our $TODO;
         my $f = sub { shift() };               # return 1st arg as-is
+
+        state sub query_is {
+            my ($query_str, $want, $msg) = @_;
+            $query_str //= '';
+            $msg       //= '';
+            # require Test::Differences;
+            # import Test::Differences;
+            # unified_diff();
+            #eq_or_diff_data($have, $want, $msg, { context => 1 })
+            my $have = _parse($query_str);
+            is_deeply($have, $want, "query: '$query_str'" . ($msg && " -- $msg"))
+                or diag("\e[41mHAVE: ${\debug($have)}\e[m\n",
+                        "\e[42mWANT: ${\debug($want)}\e[m\n");
+        }
         # OR mode (default).
         ok(!any($f, []),            "any => []");
         ok( any($f, [1]),           "any => [1]");
@@ -694,13 +698,72 @@ sub record {
         ok(!recurse($f, [1, 1, 0], 1), "recurse => [1, 1, 0]");
         ok( recurse($f, [1, 1, 1], 1), "recurse => [1, 1, 1]");
 
-        # FIXME: Moar tests.
-        is_deeply(_parse('ab'), [
-            { field => '', not => '', or => 1, type => 'or' }, [
-                { field => '', not => '', or => '', type => 'and' },
-                { _word => [qw/a b/], field => '', not => '', plain => 'ab', quote => '' },
-            ]], "query: 'a'");
+        state sub word {
+            my ($word, %opt) = @_;
+            $word //= '';
+            my @word = $word =~ /\X/gu;
+            return { 'field' => '', 'plain' => $word, '_word' => \@word, 'quote' => '', 'not' => '', %opt }
+        }
+        state sub or  { [{ 'type' => 'or',  'field' => '', 'not' => '', 'or' =>  1 }, @_] }
+        state sub and { [{ 'type' => 'and', 'field' => '', 'not' => '', 'or' => '' }, @_] }
+        note('QUERY BASICS');
+        query_is(''      => or(and(word())));
+        query_is('a'     => or(and(word('a'))));
+        query_is('ab'    => or(and(word('ab'))));
+        query_is('-ab'   => or(and(word('ab', not => 1))), 'negated');
+        query_is('--ab'  => or(and(word('ab'          ))), 'double negation = none');
+        query_is('---ab' => or(and(word('ab', not => 1))), 'negated');
+        query_is('=ab'   => or(and(word('ab', field => 1))), 'field search');
+        query_is('==ab'  => or(and(word('ab'            ))), 'double field search = none');
+        query_is('===ab' => or(and(word('ab', field => 1))), 'field search');
+        query_is('a b'   => or(and(word('a'),      word('b'))), 'and');
+        query_is('a,b'   => or(and(word('a')), and(word('b'))), 'or');
+        query_is('a b,c' => or(and(word('a'), word('b')), and(word('c'))), 'priority');
+        query_is('a,b c' => or(and(word('a')), and(word('b'), word('c'))), 'priority');
+        query_is('a -b,c' => or(and(word('a'), word('b', not => 1)), and(word('c'))), 'priority');
+        query_is('a,-b c' => or(and(word('a')), and(word('b', not => 1), word('c'))), 'priority');
 
+        note('PARENTHESIS IN QUERY');
+        query_is('(a)'     => or(and(word(), or(and(word('a'))), word())));
+        query_is('(a)b'    => or(and(word(), or(and(word('a'))), word('b'))));
+        query_is('(a b)'   => or(and(word(), or(and(word('a'),      word('b'))), word())));
+        query_is('(a,b)'   => or(and(word(), or(and(word('a')), and(word('b'))), word())));
+
+        note('UNBALANCED PARENTHESES');
+        query_is( ''       => or(and(         word()                                )));
+        query_is( ') '     => or(and(  or(and(word()   ), word(), word())           )));
+        query_is( ')'      => or(and(  or(and(word()   ), word()   )                )));
+        query_is( ') b'    => or(and(  or(and(word()   ), word(), word('b'))        )));
+        query_is('a) b'    => or(and(  or(and(word('a')), word()   , word('b'))     )));
+        query_is('a)'      => or(and(  or(and(word('a')), word()   )                )));
+        query_is('a))'     => or(and(  or(and(word('a')), word()   )                ), word()));
+        query_is('a)b'     => or(and(  or(and(word('a')), word('b'))                )));
+        query_is('a)b)c'   => or(and(  or(and(word('a')), word('b'))                ), word('c')));
+        query_is('a)b)c)'  => or(and(  or(and(or(and(word('a')), word('b'))), word('c')), word())));
+        query_is( ')b'     => or(and(  or(and(word()   ), word('b'))                )));
+        query_is( '),b'    => or(and(  or(and(word()   ), word()   ), and(word('b')))));
+        query_is('a),'     => or(and(  or(and(word('a')), word()   ), and(word()   ))));
+        query_is('a),b'    => or(and(  or(and(word('a')), word()   ), and(word('b')))));
+
+        query_is( '(b'     => or(and(word(), or(and(word('b'))))));
+        query_is('a(b'     => or(and(word('a'), or(and(word('b'))))));
+        query_is('((c'     => or(and(word(), or(and(word(), or(and(word('c'))))))));
+        query_is('a(b(c'   => or(and(word('a'), or(and(word('b'), or(and(word('c'))))))));
+
+      TODO: {
+            local $TODO = "Feature not yet implemented";
+        }
+        # Suggested new internal structure. (What does code look like if we do this?)
+        # CHANGED: word type -- remove 'plain', and 'quote', '_word' => nodes.
+        # query_is('ab'), [
+        #     {         type => 'or',   field => '', not => '', or =>  1, list => [
+        #         {     type => 'and',  field => '', not => '', or => '', list => [
+        #             { type => 'word', field => '', not => '',           list => [
+        #                 qw/a b/
+        #             ]},
+        #         ]},
+        #     ]},
+        #     "query: 'ab'");
         done_testing();
     }
 }
@@ -1374,6 +1437,11 @@ started working on tests for the same. Code is currently in a non-functional
 state, as the PARSING is approaching done, but generating the query function
 from the parse tree remains to do be done. Also, the internal representation of
 the parse tree will most likely change.
+
+[2025-11-30 13:20-14:11, 20:20-22:12], [2025-12-01 08:16-10:40, 11:21-13:50,
+15:50-16:48, 23:03-3:34], v0.7.1 - Added tests for `Query::_parse()`, and got
+the 'bottomless' stack feature to work (meaning that unmatched ')' in the
+syntax query now works too).
 
 
 =head1 COPYRIGHT AND LICENSE
