@@ -12,7 +12,7 @@ use charnames qw(:full :short);  # unneeded in v5.16
 my %opt;
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.1';                          # https://semver.org/
+our $VERSION='0.7.2';                          # https://semver.org/
 our $VERSION_DATE='1 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -622,8 +622,7 @@ sub record {
         require Test::More;                    # load at runtime
         import Test::More;                     #   (not compile time)
         our $TODO;
-        my $f = sub { shift() };               # return 1st arg as-is
-
+        state sub f { shift () }               # return 1st arg as-is
         state sub query_is {
             my ($query_str, $want, $msg) = @_;
             $query_str //= '';
@@ -638,65 +637,65 @@ sub record {
                         "\e[42mWANT: ${\debug($want)}\e[m\n");
         }
         # OR mode (default).
-        ok(!any($f, []),            "any => []");
-        ok( any($f, [1]),           "any => [1]");
-        ok(!any($f, [0, 0]),        "any => [0, 0]");
-        ok( any($f, [0, 1]),        "any => [0, 1]");
-        ok( any($f, [1, 0]),        "any => [1, 0]");
-        ok( any($f, [1, 1]),        "any => [1, 1]");
-        ok(!any($f, [0, 0, 0]),     "any => [0, 0, 0]");
-        ok( any($f, [0, 0, 1]),     "any => [0, 0, 1]");
-        ok( any($f, [0, 1, 0]),     "any => [0, 1, 0]");
-        ok( any($f, [0, 1, 1]),     "any => [0, 1, 1]");
-        ok( any($f, [1, 0, 0]),     "any => [1, 0, 0]");
-        ok( any($f, [1, 0, 1]),     "any => [1, 0, 1]");
-        ok( any($f, [1, 1, 0]),     "any => [1, 1, 0]");
-        ok( any($f, [1, 1, 1]),     "any => [1, 1, 1]");
+        ok(!any(\&f, []),            "any => []");
+        ok( any(\&f, [1]),           "any => [1]");
+        ok(!any(\&f, [0, 0]),        "any => [0, 0]");
+        ok( any(\&f, [0, 1]),        "any => [0, 1]");
+        ok( any(\&f, [1, 0]),        "any => [1, 0]");
+        ok( any(\&f, [1, 1]),        "any => [1, 1]");
+        ok(!any(\&f, [0, 0, 0]),     "any => [0, 0, 0]");
+        ok( any(\&f, [0, 0, 1]),     "any => [0, 0, 1]");
+        ok( any(\&f, [0, 1, 0]),     "any => [0, 1, 0]");
+        ok( any(\&f, [0, 1, 1]),     "any => [0, 1, 1]");
+        ok( any(\&f, [1, 0, 0]),     "any => [1, 0, 0]");
+        ok( any(\&f, [1, 0, 1]),     "any => [1, 0, 1]");
+        ok( any(\&f, [1, 1, 0]),     "any => [1, 1, 0]");
+        ok( any(\&f, [1, 1, 1]),     "any => [1, 1, 1]");
         # AND mode.
-        ok( all($f, []),            "all => []");
-        ok( all($f, [1]),           "all => [1]");
-        ok(!all($f, [0, 0]),        "all => [0, 0]");
-        ok(!all($f, [0, 1]),        "all => [0, 1]");
-        ok(!all($f, [1, 0]),        "all => [1, 0]");
-        ok( all($f, [1, 1]),        "all => [1, 1]");
-        ok(!all($f, [0, 0, 0]),     "all => [0, 0, 0]");
-        ok(!all($f, [0, 0, 1]),     "all => [0, 0, 1]");
-        ok(!all($f, [0, 1, 0]),     "all => [0, 1, 0]");
-        ok(!all($f, [0, 1, 1]),     "all => [0, 1, 1]");
-        ok(!all($f, [1, 0, 0]),     "all => [1, 0, 0]");
-        ok(!all($f, [1, 0, 1]),     "all => [1, 0, 1]");
-        ok(!all($f, [1, 1, 0]),     "all => [1, 1, 0]");
-        ok( all($f, [1, 1, 1]),     "all => [1, 1, 1]");
+        ok( all(\&f, []),            "all => []");
+        ok( all(\&f, [1]),           "all => [1]");
+        ok(!all(\&f, [0, 0]),        "all => [0, 0]");
+        ok(!all(\&f, [0, 1]),        "all => [0, 1]");
+        ok(!all(\&f, [1, 0]),        "all => [1, 0]");
+        ok( all(\&f, [1, 1]),        "all => [1, 1]");
+        ok(!all(\&f, [0, 0, 0]),     "all => [0, 0, 0]");
+        ok(!all(\&f, [0, 0, 1]),     "all => [0, 0, 1]");
+        ok(!all(\&f, [0, 1, 0]),     "all => [0, 1, 0]");
+        ok(!all(\&f, [0, 1, 1]),     "all => [0, 1, 1]");
+        ok(!all(\&f, [1, 0, 0]),     "all => [1, 0, 0]");
+        ok(!all(\&f, [1, 0, 1]),     "all => [1, 0, 1]");
+        ok(!all(\&f, [1, 1, 0]),     "all => [1, 1, 0]");
+        ok( all(\&f, [1, 1, 1]),     "all => [1, 1, 1]");
         # OR mode (default).
-        ok(!recurse($f, []),           "recurse => []");
-        ok( recurse($f, [1]),          "recurse => [1]");
-        ok(!recurse($f, [0, 0]),       "recurse => [0, 0]");
-        ok( recurse($f, [0, 1]),       "recurse => [0, 1]");
-        ok( recurse($f, [1, 0]),       "recurse => [1, 0]");
-        ok( recurse($f, [1, 1]),       "recurse => [1, 1]");
-        ok(!recurse($f, [0, 0, 0]),    "recurse => [0, 0, 0]");
-        ok( recurse($f, [0, 0, 1]),    "recurse => [0, 0, 1]");
-        ok( recurse($f, [0, 1, 0]),    "recurse => [0, 1, 0]");
-        ok( recurse($f, [0, 1, 1]),    "recurse => [0, 1, 1]");
-        ok( recurse($f, [1, 0, 0]),    "recurse => [1, 0, 0]");
-        ok( recurse($f, [1, 0, 1]),    "recurse => [1, 0, 1]");
-        ok( recurse($f, [1, 1, 0]),    "recurse => [1, 1, 0]");
-        ok( recurse($f, [1, 1, 1]),    "recurse => [1, 1, 1]");
+        ok(!recurse(\&f, []),           "recurse => []");
+        ok( recurse(\&f, [1]),          "recurse => [1]");
+        ok(!recurse(\&f, [0, 0]),       "recurse => [0, 0]");
+        ok( recurse(\&f, [0, 1]),       "recurse => [0, 1]");
+        ok( recurse(\&f, [1, 0]),       "recurse => [1, 0]");
+        ok( recurse(\&f, [1, 1]),       "recurse => [1, 1]");
+        ok(!recurse(\&f, [0, 0, 0]),    "recurse => [0, 0, 0]");
+        ok( recurse(\&f, [0, 0, 1]),    "recurse => [0, 0, 1]");
+        ok( recurse(\&f, [0, 1, 0]),    "recurse => [0, 1, 0]");
+        ok( recurse(\&f, [0, 1, 1]),    "recurse => [0, 1, 1]");
+        ok( recurse(\&f, [1, 0, 0]),    "recurse => [1, 0, 0]");
+        ok( recurse(\&f, [1, 0, 1]),    "recurse => [1, 0, 1]");
+        ok( recurse(\&f, [1, 1, 0]),    "recurse => [1, 1, 0]");
+        ok( recurse(\&f, [1, 1, 1]),    "recurse => [1, 1, 1]");
         # AND mode.
-        ok( recurse($f, [], 1),        "recurse => []");
-        ok( recurse($f, [1], 1),       "recurse => [1]");
-        ok(!recurse($f, [0, 0], 1),    "recurse => [0, 0]");
-        ok(!recurse($f, [0, 1], 1),    "recurse => [0, 1]");
-        ok(!recurse($f, [1, 0], 1),    "recurse => [1, 0]");
-        ok( recurse($f, [1, 1], 1),    "recurse => [1, 1]");
-        ok(!recurse($f, [0, 0, 0], 1), "recurse => [0, 0, 0]");
-        ok(!recurse($f, [0, 0, 1], 1), "recurse => [0, 0, 1]");
-        ok(!recurse($f, [0, 1, 0], 1), "recurse => [0, 1, 0]");
-        ok(!recurse($f, [0, 1, 1], 1), "recurse => [0, 1, 1]");
-        ok(!recurse($f, [1, 0, 0], 1), "recurse => [1, 0, 0]");
-        ok(!recurse($f, [1, 0, 1], 1), "recurse => [1, 0, 1]");
-        ok(!recurse($f, [1, 1, 0], 1), "recurse => [1, 1, 0]");
-        ok( recurse($f, [1, 1, 1], 1), "recurse => [1, 1, 1]");
+        ok( recurse(\&f, [], 1),        "recurse => []");
+        ok( recurse(\&f, [1], 1),       "recurse => [1]");
+        ok(!recurse(\&f, [0, 0], 1),    "recurse => [0, 0]");
+        ok(!recurse(\&f, [0, 1], 1),    "recurse => [0, 1]");
+        ok(!recurse(\&f, [1, 0], 1),    "recurse => [1, 0]");
+        ok( recurse(\&f, [1, 1], 1),    "recurse => [1, 1]");
+        ok(!recurse(\&f, [0, 0, 0], 1), "recurse => [0, 0, 0]");
+        ok(!recurse(\&f, [0, 0, 1], 1), "recurse => [0, 0, 1]");
+        ok(!recurse(\&f, [0, 1, 0], 1), "recurse => [0, 1, 0]");
+        ok(!recurse(\&f, [0, 1, 1], 1), "recurse => [0, 1, 1]");
+        ok(!recurse(\&f, [1, 0, 0], 1), "recurse => [1, 0, 0]");
+        ok(!recurse(\&f, [1, 0, 1], 1), "recurse => [1, 0, 1]");
+        ok(!recurse(\&f, [1, 1, 0], 1), "recurse => [1, 1, 0]");
+        ok( recurse(\&f, [1, 1, 1], 1), "recurse => [1, 1, 1]");
 
         state sub word {
             my ($word, %opt) = @_;
@@ -1439,9 +1438,12 @@ from the parse tree remains to do be done. Also, the internal representation of
 the parse tree will most likely change.
 
 [2025-11-30 13:20-14:11, 20:20-22:12], [2025-12-01 08:16-10:40, 11:21-13:50,
-15:50-16:48, 23:03-3:34], v0.7.1 - Added tests for `Query::_parse()`, and got
+15:50-16:48, 23:03-23:34] v0.7.1 - Added tests for `Query::_parse()`, and got
 the 'bottomless' stack feature to work (meaning that unmatched ')' in the
 syntax query now works too).
+
+[2025-12-01 23:42-23:50] v0.7.2 - Test callback function now declared using
+`sub {}`.
 
 
 =head1 COPYRIGHT AND LICENSE
