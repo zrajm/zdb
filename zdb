@@ -12,7 +12,7 @@ use charnames qw(:full :short);  # unneeded in v5.16
 my %opt;
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.5';                          # https://semver.org/
+our $VERSION='0.7.6';                          # https://semver.org/
 our $VERSION_DATE='2 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -436,18 +436,11 @@ sub record {
             "'" => sub { my ($state, $chr) = @_; $state->{quote} = $chr },
             CHR => sub {
                 my ($state, $chr) = @_;
-                if ($state->{quote} eq $chr) { # quoted
-                    $state->{quote} = '';
-                    return;
-                }
-                if (!@{$state->{_word}}) {     # before word
-                    if ($chr eq '-') {         #  '-' negated
-                        $state->{not} = !$state->{not};
-                        return;
-                    } elsif ($chr eq '=') {    #  '=' match whole field
-                        $state->{field} = !$state->{field};
-                        return;
-                    }
+                return $state->{quote} = '' if $chr eq $state->{quote};
+                if (!@{$state->{_word}}) {     # in front of word
+                    # Flip 'not' or 'field' if '-' or '=' is seen.
+                    return $state->{not}   = !$state->{not}   if $chr eq '-';
+                    return $state->{field} = !$state->{field} if $chr eq '=';
                 }
                 push(@{$state->{_word}}, $chr);
             },
@@ -714,6 +707,7 @@ sub record {
         query_is('(a)b'    => or(and(word(), or(and(word('a'))), word('b'))));
         query_is('(a b)'   => or(and(word(), or(and(word('a'),      word('b'))), word())));
         query_is('(a,b)'   => or(and(word(), or(and(word('a')), and(word('b'))), word())));
+        query_is('((a,b))' => or(and(word(), or(and(word(), or(and(word('a')), and(word('b'))), word())), word())));
 
         note('UNBALANCED PARENTHESES');
         query_is( ''       => or(and(         word()                                )));
@@ -1439,6 +1433,9 @@ into individual chars.)
 [2025-12-02 08:43-08:56] v0.7.4 - Very minor cleanup.
 
 [2025-12-02 09:15-09:52] v0.7.5 - Moved some parsing logic into Query::Stack.
+
+[2025-12-02 10:02-10:06] v0.7.6 - Made finite state machine shorter/more
+readable. Added a test for double parentheses.
 
 
 =head1 COPYRIGHT AND LICENSE
