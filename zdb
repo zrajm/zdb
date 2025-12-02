@@ -12,8 +12,8 @@ use charnames qw(:full :short);  # unneeded in v5.16
 my %opt;
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.3';                          # https://semver.org/
-our $VERSION_DATE='1 December 2025';
+our $VERSION='0.7.4';                          # https://semver.org/
+our $VERSION_DATE='2 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -362,7 +362,7 @@ sub record {
             # Speeechal array metadata in first element.
             # and(..) or(...) parentheses
             /^HASH$/ && exists($x->{_word}) ?  # search string
-                ($x->{not}   ? '-' : '')
+                ($x->{not} ? '-' : '')
                 . ($x->{field} ? '=' : '')
                 . (@{$x->{_word}} ? "'".join('', @{$x->{_word}})."'" : '∅') :
             /^ARRAY$/ && ref($x->[0]) eq 'HASH' && exists($x->[0]{type}) ?
@@ -700,10 +700,10 @@ sub record {
             my ($word, %opt) = @_;
             $word //= '';
             my @word = $word =~ /\X/gu;
-            return { 'field' => '', '_word' => \@word, 'quote' => '', 'not' => '', %opt }
+            return { field => '', _word => \@word, quote => '', not => '', %opt }
         }
-        state sub or  { [{ 'type' => 'or',  'field' => '', 'not' => '', 'or' =>  1 }, @_] }
-        state sub and { [{ 'type' => 'and', 'field' => '', 'not' => '', 'or' => '' }, @_] }
+        state sub or  { [{ type => 'or',  field => '', not => '', or =>  1 }, @_] }
+        state sub and { [{ type => 'and', field => '', not => '', or => '' }, @_] }
         note('QUERY BASICS');
         query_is(''      => or(and(word())));
         query_is('a'     => or(and(word('a'))));
@@ -752,7 +752,7 @@ sub record {
             local $TODO = "Feature not yet implemented";
         }
         # Suggested new internal structure. (What does code look like if we do this?)
-        # CHANGED: word type -- remove and 'quote', '_word' => nodes.
+        # CHANGED: word type -- remove and 'quote', '_word' nodes.
         # query_is('ab'), [
         #     {         type => 'or',   field => '', not => '', or =>  1, list => [
         #         {     type => 'and',  field => '', not => '', or => '', list => [
@@ -1447,6 +1447,8 @@ syntax query now works too).
 [2025-12-01 23:54-23:57] v0.7.3 - Remove use of 'plain' object property when
 parsing (& testing) query. (Now use only the '_word' property which is split
 into individual chars.)
+
+[2025-12-02 08:43-08:56] v0.7.4 - Very minor cleanup.
 
 
 =head1 COPYRIGHT AND LICENSE
