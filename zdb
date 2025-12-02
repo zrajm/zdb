@@ -12,7 +12,7 @@ use charnames qw(:full :short);  # unneeded in v5.16
 my %opt;
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.4';                          # https://semver.org/
+our $VERSION='0.7.5';                          # https://semver.org/
 our $VERSION_DATE='2 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -285,14 +285,14 @@ sub record {
 {
     package Query::Stack;
     my %paren = ( # define query parentheses
-        and => sub { [{type => 'and', not => '', or => '', field => ''}] },
-        or  => sub { [{type => 'or',  not => '', or =>  1, field => ''}] },
-        nor => sub { [{type => 'nor', not =>  1, or =>  1, field => ''}] },
+        and  => sub { [{type => 'and', not => '', or => '', field => ''}] },
+        or   => sub { [{type => 'or',  not => '', or =>  1, field => ''}] },
+        nor  => sub { [{type => 'nor', not =>  1, or =>  1, field => ''}] },
+        word => sub { { field => '', not => '', quote => '', _word => [] } },
     );
     sub new {
-        my ($class, $query_str) = @_;
-        my $self = [[]];
-        return bless($self, $class);
+        my ($class) = @_;
+        return bless([[]], $class)->push('or', 'and', 'word');
     }
     sub push {
         my ($self, @thing) = @_;
@@ -422,29 +422,19 @@ sub record {
 
     sub _parse {
         my ($query_str) = @_;
-        my sub blank_word {
-            { field => '', not => '', quote => '', _word => [] }
-        }
         my $stack = new Query::Stack();
-        $stack->push('or', 'and', blank_word());
         my %machine = (
-            '(' => sub {                                                   # DONE
+            '(' => sub {
                 my ($state) = @_;
-                $stack->push(($state->{not} ? 'nor' : 'or'), 'and', blank_word());
+                $stack->push(($state->{not} ? 'nor' : 'or'), 'and', 'word');
             },
-            ')' => sub {                                                   # FIXME
-                my ($state) = @_;
-                $stack->pop()->pop()->push(blank_word());
-            },
-            ',' => sub {                                                   # DONE
-                my ($state) = @_;
-                $stack->pop()->push('and', blank_word());
-            },
-            ' ' => sub { $stack->push(blank_word()) },                     # DONE
+            ')' => sub { $stack->pop()->pop()->push('word') },
+            ',' => sub { $stack->pop()->push('and', 'word') },
+            ' ' => sub { $stack->push('word') },
             #':' => sub { my ($s) = @_ },                                  # FIXME
-            '"' => sub { my ($state, $chr) = @_; $state->{quote} = $chr }, # DONE
-            "'" => sub { my ($state, $chr) = @_; $state->{quote} = $chr }, # DONE
-            CHR => sub {                                                   # DONE
+            '"' => sub { my ($state, $chr) = @_; $state->{quote} = $chr },
+            "'" => sub { my ($state, $chr) = @_; $state->{quote} = $chr },
+            CHR => sub {
                 my ($state, $chr) = @_;
                 if ($state->{quote} eq $chr) { # quoted
                     $state->{quote} = '';
@@ -462,10 +452,8 @@ sub record {
                 push(@{$state->{_word}}, $chr);
             },
         );
-
         say "STACK: ", debug($stack) if $opt{verbose};
         for my $chr ($query_str =~ /\X/g) {  # grapheme clusters
-            my $peek  = $stack->peek();
             my $state = $stack->state();
             $machine{
                 ($state->{quote} || !exists($machine{$chr})) ? 'CHR' : $chr
@@ -1449,6 +1437,8 @@ parsing (& testing) query. (Now use only the '_word' property which is split
 into individual chars.)
 
 [2025-12-02 08:43-08:56] v0.7.4 - Very minor cleanup.
+
+[2025-12-02 09:15-09:52] v0.7.5 - Moved some parsing logic into Query::Stack.
 
 
 =head1 COPYRIGHT AND LICENSE
