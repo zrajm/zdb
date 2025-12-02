@@ -12,7 +12,7 @@ use charnames qw(:full :short);  # unneeded in v5.16
 my %opt;
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.9';                          # https://semver.org/
+our $VERSION='0.7.10';                         # https://semver.org/
 our $VERSION_DATE='2 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -288,7 +288,7 @@ sub record {
         and  => sub { [{ type => 'and',  field => '', not => '' }] },
         or   => sub { [{ type => 'or',   field => '', not => '' }] },
         nor  => sub { [{ type => 'nor',  field => '', not =>  1 }] },
-        word => sub {  { type => 'word', field => '', not => '', quote => '', _ => [] } },
+        word => sub { [{ type => 'word', field => '', not => '', quote => '' }] },
     );
     sub new {
         my ($class) = @_;
@@ -300,17 +300,21 @@ sub record {
     sub trim {
         my ($self) = @_;
         my $last = $self->state();
-        pop @{$self->peek()} if ref($last) eq 'HASH'
-            and exists($last->{_}) and @{$last->{_}} == 0;
+        my $peek = $self->peek();
+        # Trim any empty item from the end of last stack entry.
+        pop @{$self->peek()} if @$peek > 1     #
+            and $last->[0]{type} eq 'word'     #   is word
+            and @$last == 1;                   #   with no content
         return $self;
     }
     sub push {
         my ($self, @thing) = @_;
         $self->trim();
         for (@thing) {
-            $_ = $paren{$_}() if $paren{$_};        # expand 'and', 'or' etc.
-            push(@{$self->[-1]}, $_);               # add to query
-            push(@$self, $_) if ref($_) eq 'ARRAY'; # push parenthesis to stack
+            $_ = $paren{$_}() if $paren{$_};   # expand 'and', 'or' etc.
+            push(@{$self->[-1]}, $_);          # add to query
+            push(@$self, $_)                   # push parenthesis to stack
+                if $_->[0]{type} ne 'word';
         }
         return $self;
     }
@@ -369,19 +373,18 @@ sub record {
         return "↻$_" if $seen->{$x}++;         # CYCLIC REFERENCE
         my $class = blessed($x);
         my $out =
-            # Speeechal array metadata in first element.
-            # and(..) or(...) parentheses
-            # FIXME HASH
-            /^HASH$/ && exists($x->{_}) ?  # search string
-                ($x->{not} ? '-' : '')
-                . ($x->{field} ? '=' : '')
-                . (@{$x->{_}} ? "'".join('', @{$x->{_}})."'" : '∅') :
-            /^ARRAY$/ && ref($x->[0]) eq 'HASH' && exists($x->[0]{type}) ?
-              "$x->[0]{type}(" . join(', ', map debug($_, $seen), @$x[1..$#$x]) . ')' :
+            # Array where 1st element is with hash with property 'type'.
+            /^ARRAY$/ && ref($x->[0]) eq 'HASH' && exists $x->[0]{type} ? (
+                $x->[0]{type} eq 'word' ? ( # type is 'word'
+                    ($x->[0]{not}   ? '-' : '') .
+                    ($x->[0]{field} ? '=' : '') .
+                    (@$x > 1 ? "'@{[ join('', @$x[1..$#$x]) ]}'" : '∅')
+                ) : (                       # type is non-'word'
+                    "$x->[0]{type}(" . join(', ', map debug($_, $seen), @$x[1..$#$x]) . ')'
+                )) :
             /^ARRAY$/    ? '['  . join(', ', map debug($_, $seen), @$x) . ']' :
             /^HASH$/     ? '{ ' . join(', ', map {
-                /^_/ || !$x->{$_} ? () :        # SKIP FALSY VALUES + _KEYS
-                    (/^[a-z_]\w*$/iu ? $_ : "'$_'")
+                (/^[a-z_]\w*$/iu ? $_ : "'$_'")
                     . ":"
                     . debug($x->{$_}, $seen);
             } sort keys %$x). ' }' :
@@ -437,31 +440,31 @@ sub record {
         my %machine = (
             '(' => sub {
                 my ($state) = @_;
-                $stack->push(($state->{not} ? 'nor' : 'or'), 'and', 'word');
+                $stack->push(($state->[0]{not} ? 'nor' : 'or'), 'and', 'word');
             },
             ')' => sub { $stack->pop()->pop()->push('word') },
             ',' => sub { $stack->pop()->push('and', 'word') },
             ' ' => sub { $stack->push('word') },
             #':' => sub { my ($s) = @_ },                                  # FIXME
-            '"' => sub { my ($state, $chr) = @_; $state->{quote} = $chr },
-            "'" => sub { my ($state, $chr) = @_; $state->{quote} = $chr },
+            '"' => sub { my ($state, $chr) = @_; $state->[0]{quote} = $chr },
+            "'" => sub { my ($state, $chr) = @_; $state->[0]{quote} = $chr },
             CHR => sub {
                 my ($state, $chr) = @_;
-                return $state->{quote} = '' if $chr eq $state->{quote};
+                return $state->[0]{quote} = '' if $chr eq $state->[0]{quote};
                 # At the start of word, and if not quoted.
-                if (!$state->{quote} and @{$state->{_}} == 0) {
+                if (!$state->[0]{quote} and @$state == 1) {
                     # Flip 'not' or 'field' if '-' or '=' is seen.
-                    return $state->{not}   = !$state->{not}   if $chr eq '-';
-                    return $state->{field} = !$state->{field} if $chr eq '=';
+                    return $state->[0]{not}   = !$state->[0]{not}   if $chr eq '-';
+                    return $state->[0]{field} = !$state->[0]{field} if $chr eq '=';
                 }
-                push(@{$state->{_}}, $chr);
+                push(@$state, $chr);
             },
         );
         say "STACK: ", debug($stack) if $opt{verbose};
         for my $chr ($query_str =~ /\X/g) {  # grapheme clusters
             my $state = $stack->state();
             $machine{
-                exists $machine{$chr} && !$state->{quote} ? $chr : 'CHR'
+                exists $machine{$chr} && !$state->[0]{quote} ? $chr : 'CHR'
             }($state, $chr);
             say("----------------------------------------\n",
                 "READ : '$chr'\n",
@@ -691,9 +694,10 @@ sub record {
 
         state sub word {
             my ($word, %opt) = @_;
-            my @word = ($word // '') =~ /\X/gu;
-            return { type => 'word', field => '', not => '', quote => '',
-                     %opt, _ => \@word, };
+            return [
+                { type => 'word', field => '', not => '', quote => '', %opt },
+                ($word // '') =~ /\X/gu,
+            ];
         }
         state sub or  { [{ type => 'or',  field => '', not => '' }, @_] }
         state sub and { [{ type => 'and', field => '', not => '' }, @_] }
@@ -1463,6 +1467,10 @@ for that + other small fixes.
 [2025-12-02 16:05-17:25] v0.7.9 - Removed 'or' field from stack items, and
 added 'type' = 'word' for word items (now relying on 'type' = 'and', 'or',
 'nor' or 'word').
+
+[2025-12-02 17:58-18:42, 21:12-22:30] v0.7.10 - Changed internal format. Search
+words are now also (just like parentheses) stored as arrayrefs, where first
+element is a metadata hashref.
 
 
 =head1 COPYRIGHT AND LICENSE
