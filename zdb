@@ -12,7 +12,7 @@ use charnames qw(:full :short);  # unneeded in v5.16
 my %opt;
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.8';                          # https://semver.org/
+our $VERSION='0.7.9';                          # https://semver.org/
 our $VERSION_DATE='2 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -285,10 +285,10 @@ sub record {
 {
     package Query::Stack;
     my %paren = ( # define query parentheses
-        and  => sub { [{type => 'and', not => '', or => '', field => ''}] },
-        or   => sub { [{type => 'or',  not => '', or =>  1, field => ''}] },
-        nor  => sub { [{type => 'nor', not =>  1, or =>  1, field => ''}] },
-        word => sub { { field => '', not => '', quote => '', _word => [] } },
+        and  => sub { [{ type => 'and',  field => '', not => '' }] },
+        or   => sub { [{ type => 'or',   field => '', not => '' }] },
+        nor  => sub { [{ type => 'nor',  field => '', not =>  1 }] },
+        word => sub {  { type => 'word', field => '', not => '', quote => '', _ => [] } },
     );
     sub new {
         my ($class) = @_;
@@ -301,7 +301,7 @@ sub record {
         my ($self) = @_;
         my $last = $self->state();
         pop @{$self->peek()} if ref($last) eq 'HASH'
-            and exists($last->{_word}) and @{$last->{_word}} == 0;
+            and exists($last->{_}) and @{$last->{_}} == 0;
         return $self;
     }
     sub push {
@@ -371,10 +371,11 @@ sub record {
         my $out =
             # Speeechal array metadata in first element.
             # and(..) or(...) parentheses
-            /^HASH$/ && exists($x->{_word}) ?  # search string
+            # FIXME HASH
+            /^HASH$/ && exists($x->{_}) ?  # search string
                 ($x->{not} ? '-' : '')
                 . ($x->{field} ? '=' : '')
-                . (@{$x->{_word}} ? "'".join('', @{$x->{_word}})."'" : '∅') :
+                . (@{$x->{_}} ? "'".join('', @{$x->{_}})."'" : '∅') :
             /^ARRAY$/ && ref($x->[0]) eq 'HASH' && exists($x->[0]{type}) ?
               "$x->[0]{type}(" . join(', ', map debug($_, $seen), @$x[1..$#$x]) . ')' :
             /^ARRAY$/    ? '['  . join(', ', map debug($_, $seen), @$x) . ']' :
@@ -448,12 +449,12 @@ sub record {
                 my ($state, $chr) = @_;
                 return $state->{quote} = '' if $chr eq $state->{quote};
                 # At the start of word, and if not quoted.
-                if (!$state->{quote} and @{$state->{_word}} == 0) {
+                if (!$state->{quote} and @{$state->{_}} == 0) {
                     # Flip 'not' or 'field' if '-' or '=' is seen.
                     return $state->{not}   = !$state->{not}   if $chr eq '-';
                     return $state->{field} = !$state->{field} if $chr eq '=';
                 }
-                push(@{$state->{_word}}, $chr);
+                push(@{$state->{_}}, $chr);
             },
         );
         say "STACK: ", debug($stack) if $opt{verbose};
@@ -492,10 +493,10 @@ sub record {
             }
             return [$meta, @data];
         }
-        # FORMAT: {_word: [...]}
+        # FORMAT: {_: [...]}
         if (/^HASH$/) {                           # WORD
             my %data = %$query;
-            return () if @{$data{_word}} == 0;    #   no word data
+            return () if @{$data{_}} == 0;    #   no word data
             return $query;
         }
         return $query;
@@ -691,10 +692,11 @@ sub record {
         state sub word {
             my ($word, %opt) = @_;
             my @word = ($word // '') =~ /\X/gu;
-            return { field => '', _word => \@word, quote => '', not => '', %opt }
+            return { type => 'word', field => '', not => '', quote => '',
+                     %opt, _ => \@word, };
         }
-        state sub or  { [{ type => 'or',  field => '', not => '', or =>  1 }, @_] }
-        state sub and { [{ type => 'and', field => '', not => '', or => '' }, @_] }
+        state sub or  { [{ type => 'or',  field => '', not => '' }, @_] }
+        state sub and { [{ type => 'and', field => '', not => '' }, @_] }
         note('QUERY BASICS');
         query_is(''      => or(and()));
         query_is('a'     => or(and(word('a'))));
@@ -749,7 +751,7 @@ sub record {
             local $TODO = "Feature not yet implemented";
         }
         # Suggested new internal structure. (What does code look like if we do this?)
-        # CHANGED: word type -- remove and 'quote', '_word' nodes.
+        # CHANGED: word type -- remove and 'quote', '_' nodes.
         # query_is('ab'), [
         #     {         type => 'or',   field => '', not => '', or =>  1, list => [
         #         {     type => 'and',  field => '', not => '', or => '', list => [
@@ -1457,6 +1459,10 @@ empty words.
 
 [2025-12-02 13:51-14:20] v0.7.8 - BUGFIX: Honor quotes in query + test cases
 for that + other small fixes.
+
+[2025-12-02 16:05-17:25] v0.7.9 - Removed 'or' field from stack items, and
+added 'type' = 'word' for word items (now relying on 'type' = 'and', 'or',
+'nor' or 'word').
 
 
 =head1 COPYRIGHT AND LICENSE
