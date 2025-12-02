@@ -12,7 +12,7 @@ use charnames qw(:full :short);  # unneeded in v5.16
 my %opt;
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.10';                         # https://semver.org/
+our $VERSION='0.7.11';                         # https://semver.org/
 our $VERSION_DATE='2 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -294,12 +294,12 @@ sub record {
         my ($class) = @_;
         return bless([[]], $class);
     }
-    sub peek  { return shift()->[-1]         } # get last stack item
-    sub state { return shift()->peek()->[-1] } # last word in last stack item
+    sub peek { return shift()->[-1]         }  # get last stack item
+    sub last { return shift()->peek()->[-1] }  # last word in last stack item
     # Remove empty word at end of last stack item (if any).
     sub trim {
         my ($self) = @_;
-        my $last = $self->state();
+        my $last = $self->last();
         my $peek = $self->peek();
         # Trim any empty item from the end of last stack entry.
         pop @{$self->peek()} if @$peek > 1     #
@@ -439,33 +439,33 @@ sub record {
         my $stack = new Query::Stack()->push('or', 'and', 'word');
         my %machine = (
             '(' => sub {
-                my ($state) = @_;
-                $stack->push(($state->[0]{not} ? 'nor' : 'or'), 'and', 'word');
+                my ($last) = @_;
+                $stack->push(($last->[0]{not} ? 'nor' : 'or'), 'and', 'word');
             },
             ')' => sub { $stack->pop()->pop()->push('word') },
             ',' => sub { $stack->pop()->push('and', 'word') },
             ' ' => sub { $stack->push('word') },
             #':' => sub { my ($s) = @_ },                                  # FIXME
-            '"' => sub { my ($state, $chr) = @_; $state->[0]{quote} = $chr },
-            "'" => sub { my ($state, $chr) = @_; $state->[0]{quote} = $chr },
+            '"' => sub { my ($last, $chr) = @_; $last->[0]{quote} = $chr },
+            "'" => sub { my ($last, $chr) = @_; $last->[0]{quote} = $chr },
             CHR => sub {
-                my ($state, $chr) = @_;
-                return $state->[0]{quote} = '' if $chr eq $state->[0]{quote};
+                my ($last, $chr) = @_;
+                return $last->[0]{quote} = '' if $chr eq $last->[0]{quote};
                 # At the start of word, and if not quoted.
-                if (!$state->[0]{quote} and @$state == 1) {
+                if (!$last->[0]{quote} and @$last == 1) {
                     # Flip 'not' or 'field' if '-' or '=' is seen.
-                    return $state->[0]{not}   = !$state->[0]{not}   if $chr eq '-';
-                    return $state->[0]{field} = !$state->[0]{field} if $chr eq '=';
+                    return $last->[0]{not}   = !$last->[0]{not}   if $chr eq '-';
+                    return $last->[0]{field} = !$last->[0]{field} if $chr eq '=';
                 }
-                push(@$state, $chr);
+                push(@$last, $chr);
             },
         );
         say "STACK: ", debug($stack) if $opt{verbose};
         for my $chr ($query_str =~ /\X/g) {  # grapheme clusters
-            my $state = $stack->state();
+            my $last = $stack->last();
             $machine{
-                exists $machine{$chr} && !$state->[0]{quote} ? $chr : 'CHR'
-            }($state, $chr);
+                exists $machine{$chr} && !$last->[0]{quote} ? $chr : 'CHR'
+            }($last, $chr);
             say("----------------------------------------\n",
                 "READ : '$chr'\n",
                 'STACK: ', debug($stack), "\n",
@@ -1472,6 +1472,9 @@ added 'type' = 'word' for word items (now relying on 'type' = 'and', 'or',
 words are now also (just like parentheses) stored as arrayrefs, where first
 element is a metadata hashref.
 
+[2025-12-02 22:38-22:58] v0.7.11 - Renamed a B<Query::Stack> function.
+Documented the future of the query parsing.
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1501,6 +1504,10 @@ Hence, this little project! :)
 =head1 INTERNALS
 
 =head2 Internal Query Format
+
+Query consists of subqueries and terms. A subquery is a parenthesis + its
+content, and an atom is a search 'word', optionally prefixed by 'not' (B<->) or
+'field' (B<=>) modifiers.
 
 Internally query tree structure, consisting of a nested list, where the leaves
 are functions. These matcher functions are called for each field/value pair,
@@ -1561,6 +1568,23 @@ Below are some planned future features. (Some section has separate FIXME
 comments that will be fixed in the future as well.)
 
 =head2 Read QUERY arguments
+
+=over 2
+
+=item * Remove empty parentheses in QUERY
+
+Do this recursively so that parentheses that contain only empty parentheses are
+also removed. (Should be added to the B<trim()> function of B<Query::Stack>?)
+
+=item * Move negation to leaves
+
+If a parenthesis is negated the negation should be applied to the leaves of the
+search terms, not at the parenthesis level. Doing so means that any one search
+term is only even negated once (= B<Negation Normal Form> or B<NNF>), which is
+needed for highlighting of search results to work. (If not using the NNF forms,
+some search terms which are negated twice would not be highlighted.)
+
+=back
 
 =head2 Search in comments
 
