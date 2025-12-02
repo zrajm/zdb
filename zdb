@@ -12,7 +12,7 @@ use charnames qw(:full :short);  # unneeded in v5.16
 my %opt;
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.6';                          # https://semver.org/
+our $VERSION='0.7.7';                          # https://semver.org/
 our $VERSION_DATE='2 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -294,8 +294,17 @@ sub record {
         my ($class) = @_;
         return bless([[]], $class)->push('or', 'and', 'word');
     }
+    # Remove empty word at end of last stack item (if any).
+    sub trim {
+        my ($self) = @_;
+        my $last = $self->state();
+        pop @{$self->peek()} if ref($last) eq 'HASH'
+            and exists($last->{_word}) and @{$last->{_word}} == 0;
+        return $self;
+    }
     sub push {
         my ($self, @thing) = @_;
+        $self->trim();
         for (@thing) {
             $_ = $paren{$_}() if $paren{$_};        # expand 'and', 'or' etc.
             push(@{$self->[-1]}, $_);               # add to query
@@ -307,6 +316,7 @@ sub record {
     sub peek  { return shift()->[-1]         } # get last entry (w/o remove)
     sub pop {                                  # get last entry (and remove)
         my ($self) = @_;
+        $self->trim();
         pop @$self;
         #
         # FIXME: Currently stack is `[[QUERY], stack1, stack2, etc]`. If
@@ -457,7 +467,7 @@ sub record {
                 'CLEAN: ', debug([[_cleanup($stack->[0][0])]]))
                 if $opt{verbose};
         }
-        return $stack->[0][0];
+        return $stack->trim()->[0][0];
     }
 
     # FIXME: Push negations downwards/towards tree leaves
@@ -686,16 +696,16 @@ sub record {
         state sub or  { [{ type => 'or',  field => '', not => '', or =>  1 }, @_] }
         state sub and { [{ type => 'and', field => '', not => '', or => '' }, @_] }
         note('QUERY BASICS');
-        query_is(''      => or(and(word())));
+        query_is(''      => or(and()));
         query_is('a'     => or(and(word('a'))));
         query_is('ab'    => or(and(word('ab'))));
         query_is('-ab'   => or(and(word('ab', not => 1))), 'negated');
-        query_is('--ab'  => or(and(word('ab'          ))), 'double negation = none');
+        query_is('--ab'  => or(and(word('ab'))), 'double negation = none');
         query_is('---ab' => or(and(word('ab', not => 1))), 'negated');
         query_is('=ab'   => or(and(word('ab', field => 1))), 'field search');
-        query_is('==ab'  => or(and(word('ab'            ))), 'double field search = none');
+        query_is('==ab'  => or(and(word('ab'))), 'double field search = none');
         query_is('===ab' => or(and(word('ab', field => 1))), 'field search');
-        query_is('a b'   => or(and(word('a'),      word('b'))), 'and');
+        query_is('a b'   => or(and(word('a'), word('b'))), 'and');
         query_is('a,b'   => or(and(word('a')), and(word('b'))), 'or');
         query_is('a b,c' => or(and(word('a'), word('b')), and(word('c'))), 'priority');
         query_is('a,b c' => or(and(word('a')), and(word('b'), word('c'))), 'priority');
@@ -703,31 +713,30 @@ sub record {
         query_is('a,-b c' => or(and(word('a')), and(word('b', not => 1), word('c'))), 'priority');
 
         note('PARENTHESIS IN QUERY');
-        query_is('(a)'     => or(and(word(), or(and(word('a'))), word())));
-        query_is('(a)b'    => or(and(word(), or(and(word('a'))), word('b'))));
-        query_is('(a b)'   => or(and(word(), or(and(word('a'),      word('b'))), word())));
-        query_is('(a,b)'   => or(and(word(), or(and(word('a')), and(word('b'))), word())));
-        query_is('((a,b))' => or(and(word(), or(and(word(), or(and(word('a')), and(word('b'))), word())), word())));
+        query_is('(a)'     => or(and(or(and(word('a'))))));
+        query_is('(a)b'    => or(and(or(and(word('a'))), word('b'))));
+        query_is('(a b)'   => or(and(or(and(word('a'), word('b'))))));
+        query_is('(a,b)'   => or(and(or(and(word('a')), and(word('b'))))));
+        query_is('((a,b))' => or(and(or(and(or(and(word('a')), and(word('b'))))))));
 
         note('UNBALANCED PARENTHESES');
-        query_is( ''       => or(and(         word()                                )));
-        query_is( ') '     => or(and(  or(and(word()   ), word(), word())           )));
-        query_is( ')'      => or(and(  or(and(word()   ), word()   )                )));
-        query_is( ') b'    => or(and(  or(and(word()   ), word(), word('b'))        )));
-        query_is('a) b'    => or(and(  or(and(word('a')), word()   , word('b'))     )));
-        query_is('a)'      => or(and(  or(and(word('a')), word()   )                )));
-        query_is('a))'     => or(and(  or(and(word('a')), word()   )                ), word()));
-        query_is('a)b'     => or(and(  or(and(word('a')), word('b'))                )));
-        query_is('a)b)c'   => or(and(  or(and(word('a')), word('b'))                ), word('c')));
-        query_is('a)b)c)'  => or(and(  or(and(or(and(word('a')), word('b'))), word('c')), word())));
-        query_is( ')b'     => or(and(  or(and(word()   ), word('b'))                )));
-        query_is( '),b'    => or(and(  or(and(word()   ), word()   ), and(word('b')))));
-        query_is('a),'     => or(and(  or(and(word('a')), word()   ), and(word()   ))));
-        query_is('a),b'    => or(and(  or(and(word('a')), word()   ), and(word('b')))));
+        query_is( ') '     => or(and(or(and()))));
+        query_is( ')'      => or(and(or(and()))));
+        query_is( ') b'    => or(and(or(and(), word('b')))));
+        query_is('a) b'    => or(and(or(and(word('a')), word('b')))));
+        query_is('a)'      => or(and(or(and(word('a'))))));
+        query_is('a))'     => or(and(or(and(word('a'))))));
+        query_is('a)b'     => or(and(or(and(word('a')), word('b')))));
+        query_is('a)b)c'   => or(and(or(and(word('a')), word('b'))), word('c')));
+        query_is('a)b)c)'  => or(and(or(and(or(and(word('a')), word('b'))), word('c')))));
+        query_is( ')b'     => or(and(or(and(), word('b')))));
+        query_is( '),b'    => or(and(or(and()), and(word('b')))));
+        query_is('a),'     => or(and(or(and(word('a'))), and())));
+        query_is('a),b'    => or(and(or(and(word('a'))), and(word('b')))));
 
-        query_is( '(b'     => or(and(word(), or(and(word('b'))))));
+        query_is( '(b'     => or(and(or(and(word('b'))))));
         query_is('a(b'     => or(and(word('a'), or(and(word('b'))))));
-        query_is('((c'     => or(and(word(), or(and(word(), or(and(word('c'))))))));
+        query_is('((c'     => or(and(or(and(or(and(word('c'))))))));
         query_is('a(b(c'   => or(and(word('a'), or(and(word('b'), or(and(word('c'))))))));
 
       TODO: {
@@ -1436,6 +1445,9 @@ into individual chars.)
 
 [2025-12-02 10:02-10:06] v0.7.6 - Made finite state machine shorter/more
 readable. Added a test for double parentheses.
+
+[2025-12-02 11:34-13:44] v0.7.7 - Simplify query during parsing by trimming
+empty words.
 
 
 =head1 COPYRIGHT AND LICENSE
