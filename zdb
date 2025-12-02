@@ -12,7 +12,7 @@ use charnames qw(:full :short);  # unneeded in v5.16
 my %opt;
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.7';                          # https://semver.org/
+our $VERSION='0.7.8';                          # https://semver.org/
 our $VERSION_DATE='2 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -292,8 +292,10 @@ sub record {
     );
     sub new {
         my ($class) = @_;
-        return bless([[]], $class)->push('or', 'and', 'word');
+        return bless([[]], $class);
     }
+    sub peek  { return shift()->[-1]         } # get last stack item
+    sub state { return shift()->peek()->[-1] } # last word in last stack item
     # Remove empty word at end of last stack item (if any).
     sub trim {
         my ($self) = @_;
@@ -312,8 +314,6 @@ sub record {
         }
         return $self;
     }
-    sub state { return shift()->peek()->[-1] } # current word state
-    sub peek  { return shift()->[-1]         } # get last entry (w/o remove)
     sub pop {                                  # get last entry (and remove)
         my ($self) = @_;
         $self->trim();
@@ -432,7 +432,7 @@ sub record {
 
     sub _parse {
         my ($query_str) = @_;
-        my $stack = new Query::Stack();
+        my $stack = new Query::Stack()->push('or', 'and', 'word');
         my %machine = (
             '(' => sub {
                 my ($state) = @_;
@@ -447,7 +447,8 @@ sub record {
             CHR => sub {
                 my ($state, $chr) = @_;
                 return $state->{quote} = '' if $chr eq $state->{quote};
-                if (!@{$state->{_word}}) {     # in front of word
+                # At the start of word, and if not quoted.
+                if (!$state->{quote} and @{$state->{_word}} == 0) {
                     # Flip 'not' or 'field' if '-' or '=' is seen.
                     return $state->{not}   = !$state->{not}   if $chr eq '-';
                     return $state->{field} = !$state->{field} if $chr eq '=';
@@ -459,7 +460,7 @@ sub record {
         for my $chr ($query_str =~ /\X/g) {  # grapheme clusters
             my $state = $stack->state();
             $machine{
-                ($state->{quote} || !exists($machine{$chr})) ? 'CHR' : $chr
+                exists $machine{$chr} && !$state->{quote} ? $chr : 'CHR'
             }($state, $chr);
             say("----------------------------------------\n",
                 "READ : '$chr'\n",
@@ -622,7 +623,7 @@ sub record {
             # unified_diff();
             #eq_or_diff_data($have, $want, $msg, { context => 1 })
             my $have = _parse($query_str);
-            is_deeply($have, $want, "query: '$query_str'" . ($msg && " -- $msg"))
+            is_deeply($have, $want, "query: $query_str" . ($msg && " -- $msg"))
                 or diag("\e[41mHAVE: ${\debug($have)}\e[m\n",
                         "\e[42mWANT: ${\debug($want)}\e[m\n");
         }
@@ -689,8 +690,7 @@ sub record {
 
         state sub word {
             my ($word, %opt) = @_;
-            $word //= '';
-            my @word = $word =~ /\X/gu;
+            my @word = ($word // '') =~ /\X/gu;
             return { field => '', _word => \@word, quote => '', not => '', %opt }
         }
         state sub or  { [{ type => 'or',  field => '', not => '', or =>  1 }, @_] }
@@ -738,6 +738,12 @@ sub record {
         query_is('a(b'     => or(and(word('a'), or(and(word('b'))))));
         query_is('((c'     => or(and(or(and(or(and(word('c'))))))));
         query_is('a(b(c'   => or(and(word('a'), or(and(word('b'), or(and(word('c'))))))));
+
+        note('QUOTED STRINGS');
+        query_is('"()"'  => or(and(word('()'))));
+        query_is('-"a"'  => or(and(word('a', not => 1))));
+        query_is('"-a"'  => or(and(word('-a'))));
+        query_is('-"-a"' => or(and(word('-a', not => 1))));
 
       TODO: {
             local $TODO = "Feature not yet implemented";
@@ -1448,6 +1454,9 @@ readable. Added a test for double parentheses.
 
 [2025-12-02 11:34-13:44] v0.7.7 - Simplify query during parsing by trimming
 empty words.
+
+[2025-12-02 13:51-14:20] v0.7.8 - BUGFIX: Honor quotes in query + test cases
+for that + other small fixes.
 
 
 =head1 COPYRIGHT AND LICENSE
