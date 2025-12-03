@@ -12,7 +12,7 @@ use charnames qw(:full :short);  # unneeded in v5.16
 my %opt;
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.13';                         # https://semver.org/
+our $VERSION='0.7.14';                         # https://semver.org/
 our $VERSION_DATE='3 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -671,22 +671,24 @@ sub record {
         }
         state sub or  { [{ type => 'or',  field => '', not => '' }, @_] }
         state sub and { [{ type => 'and', field => '', not => '' }, @_] }
+        state sub neg   { $_->[0]{not}   = 1 for @_; @_ }
+        state sub field { $_->[0]{field} = 1 for @_; @_ }
         note('QUERY BASICS');
         query_is(''      => or());
         query_is('a'     => or(and(word('a'))));
         query_is('ab'    => or(and(word('ab'))));
-        query_is('-ab'   => or(and(word('ab', not => 1))), 'negated');
+        query_is('-ab'   => or(and(neg word('ab'))), 'negated');
         query_is('--ab'  => or(and(word('ab'))), 'double negation = none');
-        query_is('---ab' => or(and(word('ab', not => 1))), 'negated');
-        query_is('=ab'   => or(and(word('ab', field => 1))), 'field search');
+        query_is('---ab' => or(and(neg word('ab'))), 'negated');
+        query_is('=ab'   => or(and(field word('ab'))), 'field search');
         query_is('==ab'  => or(and(word('ab'))), 'double field search = none');
-        query_is('===ab' => or(and(word('ab', field => 1))), 'field search');
+        query_is('===ab' => or(and(field word('ab'))), 'field search');
         query_is('a b'   => or(and(word('a'), word('b'))), 'and');
         query_is('a,b'   => or(and(word('a')), and(word('b'))), 'or');
         query_is('a b,c' => or(and(word('a'), word('b')), and(word('c'))), 'priority');
         query_is('a,b c' => or(and(word('a')), and(word('b'), word('c'))), 'priority');
-        query_is('a -b,c' => or(and(word('a'), word('b', not => 1)), and(word('c'))), 'priority');
-        query_is('a,-b c' => or(and(word('a')), and(word('b', not => 1), word('c'))), 'priority');
+        query_is('a -b,c' => or(and(word('a'), neg word('b')), and(word('c'))), 'priority');
+        query_is('a,-b c' => or(and(word('a')), and(neg(word('b')), word('c'))), 'priority');
 
         note('PARENTHESIS IN QUERY');
         query_is('(a)'     => or(and(or(and(word('a'))))));
@@ -717,24 +719,13 @@ sub record {
 
         note('QUOTED STRINGS');
         query_is('"()"'  => or(and(word('()'))));
-        query_is('-"a"'  => or(and(word('a', not => 1))));
+        query_is('-"a"'  => or(and(neg word('a'))));
         query_is('"-a"'  => or(and(word('-a'))));
-        query_is('-"-a"' => or(and(word('-a', not => 1))));
+        query_is('-"-a"' => or(and(neg word('-a'))));
 
       TODO: {
             local $TODO = "Feature not yet implemented";
         }
-        # Suggested new internal structure. (What does code look like if we do this?)
-        # CHANGED: word type -- remove and 'quote', '_' nodes.
-        # query_is('ab'), [
-        #     {         type => 'or',   field => '', not => '', or =>  1, list => [
-        #         {     type => 'and',  field => '', not => '', or => '', list => [
-        #             { type => 'word', field => '', not => '',           list => [
-        #                 qw/a b/
-        #             ]},
-        #         ]},
-        #     ]},
-        #     "query: 'ab'");
         done_testing();
     }
 }
@@ -1451,6 +1442,9 @@ Documented the future of the query parsing.
 parsing. This continually cleans up both empty search words (which are inserted
 as part of the query parsing itself) and empty parentheses as the query is
 being parsed.
+
+[2025-12-03 09:45-10:05] v0.7.14 - Slightly different syntax for unit tests
+involving 'not' (B<->) and 'field' (B<=>) prefixes.
 
 
 =head1 COPYRIGHT AND LICENSE
