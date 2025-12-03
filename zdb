@@ -12,7 +12,7 @@ use charnames qw(:full :short);  # unneeded in v5.16
 my %opt;
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.14';                         # https://semver.org/
+our $VERSION='0.7.15';                         # https://semver.org/
 our $VERSION_DATE='3 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -287,7 +287,6 @@ sub record {
     my %paren = ( # define query parentheses
         and  => sub { [{ type => 'and',  field => '', not => '' }] },
         or   => sub { [{ type => 'or',   field => '', not => '' }] },
-        nor  => sub { [{ type => 'nor',  field => '', not =>  1 }] },
         word => sub { [{ type => 'word', field => '', not => '', quote => '' }] },
     );
     sub new {
@@ -296,6 +295,13 @@ sub record {
     }
     sub peek { return shift()->[-1]         }  # get last stack item
     sub last { return shift()->peek()->[-1] }  # last word in last stack item
+    # Set metadata options for last stack entry.
+    sub set {
+        my ($self, %opt) = @_;
+        my $peek = $self->peek();
+        %{$peek->[0]} = (%{$peek->[0]}, %opt);
+        return $self;
+    }
     # Strip any trailing empty word/parenthesis in last stack item.
     sub trim {
         my ($self) = @_;
@@ -380,6 +386,8 @@ sub record {
                     ($x->[0]{field} ? '=' : '') .
                     (@$x > 1 ? "'@{[ join('', @$x[1..$#$x]) ]}'" : '∅')
                 ) : (                       # type is non-'word'
+                    ($x->[0]{not}   ? '-' : '') .
+                    ($x->[0]{field} ? '=' : '') .
                     "$x->[0]{type}(" . join(', ', map debug($_, $seen), @$x[1..$#$x]) . ')'
                 )) :
             /^ARRAY$/    ? '['  . join(', ', map debug($_, $seen), @$x) . ']' :
@@ -440,7 +448,10 @@ sub record {
         my %machine = (
             '(' => sub {
                 my ($last) = @_;
-                $stack->push(($last->[0]{not} ? 'nor' : 'or'), 'and', 'word');
+                $stack->push('or')->set(
+                    not   => $last->[0]{not},
+                    field => $last->[0]{field},
+                )->push('and', 'word');
             },
             ')' => sub { $stack->pop()->pop()->push('word') },
             ',' => sub { $stack->pop()->push('and', 'word') },
@@ -597,7 +608,7 @@ sub record {
             # unified_diff();
             #eq_or_diff_data($have, $want, $msg, { context => 1 })
             my $have = _parse($query_str);
-            is_deeply($have, $want, "query: «$query_str»" . ($msg && " -- $msg"))
+            is_deeply($have, $want, "query: «$query_str»" . ($msg && " ($msg)"))
                 or diag("\e[41mHAVE: ${\debug($have)}\e[m\n",
                         "\e[42mWANT: ${\debug($want)}\e[m\n");
         }
@@ -1445,6 +1456,10 @@ being parsed.
 
 [2025-12-03 09:45-10:05] v0.7.14 - Slightly different syntax for unit tests
 involving 'not' (B<->) and 'field' (B<=>) prefixes.
+
+[2025-12-03 10:14-11:40] v0.7.15 - Slight change in debug output. No longer
+using 'nor' for negative OR parentheses, but instead prefixing parentheses B<->
+and B<=> for negated and field matching.
 
 
 =head1 COPYRIGHT AND LICENSE
