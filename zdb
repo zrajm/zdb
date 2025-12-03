@@ -12,8 +12,8 @@ use charnames qw(:full :short);  # unneeded in v5.16
 my %opt;
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.16';                         # https://semver.org/
-our $VERSION_DATE='3 December 2025';
+our $VERSION='0.7.17';                         # https://semver.org/
+our $VERSION_DATE='4 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -608,7 +608,7 @@ sub record {
         require Test::More;                    # load at runtime
         import Test::More;                     #   (not compile time)
         our $TODO;
-        state sub f { shift () }               # return 1st arg as-is
+        Test::More->builder->todo_output(\(my $x)); # no errors on TODO tests
         state sub query_is {
             my ($query_str, $want, $msg) = @_;
             $query_str //= '';
@@ -618,10 +618,18 @@ sub record {
             # unified_diff();
             #eq_or_diff_data($have, $want, $msg, { context => 1 })
             my $have = _parse($query_str);
+            local $Test::Builder::Level = $Test::Builder::Level + 2;
             is_deeply($have, $want, "query: «$query_str»" . ($msg && " ($msg)"))
                 or diag("\e[41mHAVE: ${\debug($have)}\e[m\n",
                         "\e[42mWANT: ${\debug($want)}\e[m\n");
         }
+        state sub TODO($&@) {
+            my ($msg, $coderef, @args) = @_;
+            local $TODO = 'Not Yet Implemented';
+            subtest("TODO $msg", $coderef, @args);
+        }
+
+        state sub f { shift () }               # return 1st arg as-is
         # OR mode (default).
         ok(!any(\&f, []),            "any => []");
         ok( any(\&f, [1]),           "any => [1]");
@@ -754,15 +762,19 @@ sub record {
         query_is('-(a -b)' => neg(and(word('a'), neg word('b'))), 'means «(-a,b)» -- FIXME De Morgan');
         query_is('-(a,-b)' => neg(or(word('a'), neg(word('b')))), 'means «(-a b)» -- FIXME De Morgan');
 
+        TODO "Push 'not' to leaf nodes" => sub {
+            query_is('-(a -b)' => or(neg(word('a')), word('b')), 'means «(-a,b)»');
+            query_is('-(a,-b)' => or(neg(word('a')), word('b')), 'means «(-a b)»');
+        };
         note('FIELD PROPAGATION');
         query_is('=(a)'    => field(word('a')), 'means «=a»');
         query_is('=(=a)'   => word('a'), 'means «a»');
         query_is('=(a =b)' => field(and(word('a'), field word('b'))), 'means «=a b» FIXME');
         query_is('=(a,=b)' => field(or(word('a'), field(word('b')))), 'means «=a,b» FIXME');
-
-      TODO: {
-            local $TODO = "Feature not yet implemented";
-        }
+        TODO "Push 'field' to leaf nodes" => sub {
+            query_is('=(a =b)' => and(field(word('a')), word('b')), 'means «=a b»');
+            query_is('=(a,=b)' => or(field(word('a')), word('b')), 'means «=a,b»');
+        };
         done_testing();
     }
 }
@@ -1490,6 +1502,8 @@ and B<=> for negated and field matching.
 [2025-12-03 17:31-21:54] v0.7.16 - Now removes any parenthesis in QUERY that
 wrap a single term. Term inside is kept, and the 'not' and 'field' attributes
 of the removed parenthesis and the term are combined.
+
+[2025-12-03 23:46-00:51] v0.7.17 - Prettier B<--test> output.
 
 
 =head1 COPYRIGHT AND LICENSE
