@@ -12,7 +12,7 @@ use charnames qw(:full :short);  # unneeded in v5.16
 my %opt;
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.15';                         # https://semver.org/
+our $VERSION='0.7.16';                         # https://semver.org/
 our $VERSION_DATE='3 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -285,9 +285,9 @@ sub record {
 {
     package Query::Stack;
     my %paren = ( # define query parentheses
-        and  => sub { [{ type => 'and',  field => '', not => '' }] },
-        or   => sub { [{ type => 'or',   field => '', not => '' }] },
-        word => sub { [{ type => 'word', field => '', not => '', quote => '' }] },
+        and  => sub { [{ type => 'and',  field => 0, not => 0 }] },
+        or   => sub { [{ type => 'or',   field => 0, not => 0 }] },
+        word => sub { [{ type => 'word', field => 0, not => 0, quote => '' }] },
     );
     sub new {
         my ($class) = @_;
@@ -326,7 +326,17 @@ sub record {
     sub pop {                                  # get last entry (and remove)
         my ($self, $done) = @_;
         $self->trim();
-        pop @$self;
+        my $popped = pop @$self;
+
+        # If popped term contains parenthesis with a single term, remove
+        # parenthesis (but keep the term inside). Also combine 'not' and
+        # 'field' attributes from the parenthesis and the term inside.
+        if (@$popped == 2) {
+            $popped->[1][0]{field} ^= $popped->[0]{field};
+            $popped->[1][0]{not}   ^= $popped->[0]{not};
+            @$popped = @{$popped->[1]};
+        }
+
         return $self if $done;                 # cleanup phase = abort
         #
         # FIXME: Currently stack is `[[QUERY], stack1, stack2, etc]`. If
@@ -676,63 +686,79 @@ sub record {
         state sub word {
             my ($word, %opt) = @_;
             return [
-                { type => 'word', field => '', not => '', quote => '', %opt },
+                { type => 'word', field => 0, not => 0, quote => '', %opt },
                 ($word // '') =~ /\X/gu,
             ];
         }
-        state sub or  { [{ type => 'or',  field => '', not => '' }, @_] }
-        state sub and { [{ type => 'and', field => '', not => '' }, @_] }
+        state sub or  { [{ type => 'or',  field => 0, not => 0 }, @_] }
+        state sub and { [{ type => 'and', field => 0, not => 0 }, @_] }
         state sub neg   { $_->[0]{not}   = 1 for @_; @_ }
         state sub field { $_->[0]{field} = 1 for @_; @_ }
         note('QUERY BASICS');
         query_is(''      => or());
-        query_is('a'     => or(and(word('a'))));
-        query_is('ab'    => or(and(word('ab'))));
-        query_is('-ab'   => or(and(neg word('ab'))), 'negated');
-        query_is('--ab'  => or(and(word('ab'))), 'double negation = none');
-        query_is('---ab' => or(and(neg word('ab'))), 'negated');
-        query_is('=ab'   => or(and(field word('ab'))), 'field search');
-        query_is('==ab'  => or(and(word('ab'))), 'double field search = none');
-        query_is('===ab' => or(and(field word('ab'))), 'field search');
-        query_is('a b'   => or(and(word('a'), word('b'))), 'and');
-        query_is('a,b'   => or(and(word('a')), and(word('b'))), 'or');
-        query_is('a b,c' => or(and(word('a'), word('b')), and(word('c'))), 'priority');
-        query_is('a,b c' => or(and(word('a')), and(word('b'), word('c'))), 'priority');
-        query_is('a -b,c' => or(and(word('a'), neg word('b')), and(word('c'))), 'priority');
-        query_is('a,-b c' => or(and(word('a')), and(neg(word('b')), word('c'))), 'priority');
+        query_is('a'     => word('a'));
+        query_is('ab'    => word('ab'));
+        query_is('-ab'   => neg(word('ab')), 'negated');
+        query_is('--ab'  => word('ab'), 'double negation = none');
+        query_is('---ab' => neg(word('ab')), 'negated');
+        query_is('=ab'   => field(word('ab')), 'field search');
+        query_is('==ab'  => word('ab'), 'double field search = none');
+        query_is('===ab' => field(word('ab')), 'field search');
+        query_is('a b'   => and(word('a'), word('b')), 'and');
+        query_is('a,b'   => or(word('a'), word('b')), 'or');
+        query_is('a b,c' => or(and(word('a'), word('b')), word('c')), 'priority');
+        query_is('a,b c' => or(word('a'), and(word('b'), word('c'))), 'priority');
+        query_is('a -b,c' => or(and(word('a'), neg word('b')), word('c')), 'priority');
+        query_is('a,-b c' => or(word('a'), and(neg(word('b')), word('c'))), 'priority');
 
         note('PARENTHESIS IN QUERY');
-        query_is('(a)'     => or(and(or(and(word('a'))))));
-        query_is('(a)b'    => or(and(or(and(word('a'))), word('b'))));
-        query_is('(a b)'   => or(and(or(and(word('a'), word('b'))))));
-        query_is('(a,b)'   => or(and(or(and(word('a')), and(word('b'))))));
-        query_is('((a,b))' => or(and(or(and(or(and(word('a')), and(word('b'))))))));
+        query_is('(a)'     => word('a'));
+        query_is('(a)b'    => and(word('a'), word('b')));
+        query_is('(a b)'   => and(word('a'), word('b')));
+        query_is('(a,b)'   => or(word('a'), word('b')));
+        query_is('((a,b))' => or(word('a'), word('b')));
 
         note('UNBALANCED PARENTHESES');
         query_is( ') '     => or());
         query_is( ')'      => or());
-        query_is( ') b'    => or(and(or(word('b')))));
-        query_is('a) b'    => or(and(or(and(word('a')), word('b')))));
-        query_is('a)'      => or(and(or(and(word('a'))))));
-        query_is('a))'     => or(and(or(and(word('a'))))));
-        query_is('a)b'     => or(and(or(and(word('a')), word('b')))));
-        query_is('a)b)c'   => or(and(or(and(word('a')), word('b'))), word('c')));
-        query_is('a)b)c)'  => or(and(or(and(or(and(word('a')), word('b'))), word('c')))));
-        query_is( ')b'     => or(and(or(word('b')))));
-        query_is( '),b'    => or(and(and(word('b')))));
-        query_is('a),'     => or(and(or(and(word('a'))))));
-        query_is('a),b'    => or(and(or(and(word('a'))), and(word('b')))));
+        query_is( ') b'    => word('b'));
+        query_is('a) b'    => and(word('a'), word('b')));
+        query_is('a)'      => word('a'));
+        query_is('a))'     => word('a'));
+        query_is('a)b'     => and(word('a'), word('b')));
+        query_is('a)b)c'   => and(word('a'), word('b'), word('c')));
+        query_is('a)b)c)'  => and(word('a'), word('b'), word('c')));
+        query_is( ')b'     => word('b'));
+        query_is( '),b'    => word('b'));
+        query_is('a),'     => word('a'));
+        query_is('a),b'    => or(word('a'), word('b')));
 
-        query_is( '(b'     => or(and(or(and(word('b'))))));
-        query_is('a(b'     => or(and(word('a'), or(and(word('b'))))));
-        query_is('((c'     => or(and(or(and(or(and(word('c'))))))));
-        query_is('a(b(c'   => or(and(word('a'), or(and(word('b'), or(and(word('c'))))))));
+        query_is( '(b'     => word('b'));
+        query_is('a(b'     => and(word('a'), word('b')));
+        query_is('((c'     => word('c'));
+        query_is('a(b(c'   => and(word('a'), and(word('b'), word('c'))));
+        query_is('a(b(c,'  => and(word('a'), and(word('b'), word('c'))));
+        query_is('a(b,(c'  => and(word('a'), or(word('b'), word('c'))));
 
         note('QUOTED STRINGS');
-        query_is('"()"'  => or(and(word('()'))));
-        query_is('-"a"'  => or(and(neg word('a'))));
-        query_is('"-a"'  => or(and(word('-a'))));
-        query_is('-"-a"' => or(and(neg word('-a'))));
+        query_is('"()"'  => word('()'));
+        query_is('-"a"'  => neg(word('a')));
+        query_is('"-a"'  => word('-a'));
+        query_is('-"-a"' => neg(word('-a')));
+
+        note('NEGATION PROPAGATION');
+        query_is('-a'      => neg(word('a')));
+        query_is('--a'     => word('a'), 'means «a»');
+        query_is('-(a)'    => neg(word('a')), 'means «-a»');
+        query_is('-(-a)'   => word('a'), 'means «a»');
+        query_is('-(a -b)' => neg(and(word('a'), neg word('b'))), 'means «(-a,b)» -- FIXME De Morgan');
+        query_is('-(a,-b)' => neg(or(word('a'), neg(word('b')))), 'means «(-a b)» -- FIXME De Morgan');
+
+        note('FIELD PROPAGATION');
+        query_is('=(a)'    => field(word('a')), 'means «=a»');
+        query_is('=(=a)'   => word('a'), 'means «a»');
+        query_is('=(a =b)' => field(and(word('a'), field word('b'))), 'means «=a b» FIXME');
+        query_is('=(a,=b)' => field(or(word('a'), field(word('b')))), 'means «=a,b» FIXME');
 
       TODO: {
             local $TODO = "Feature not yet implemented";
@@ -1461,6 +1487,10 @@ involving 'not' (B<->) and 'field' (B<=>) prefixes.
 using 'nor' for negative OR parentheses, but instead prefixing parentheses B<->
 and B<=> for negated and field matching.
 
+[2025-12-03 17:31-21:54] v0.7.16 - Now removes any parenthesis in QUERY that
+wrap a single term. Term inside is kept, and the 'not' and 'field' attributes
+of the removed parenthesis and the term are combined.
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1556,11 +1586,6 @@ comments that will be fixed in the future as well.)
 =head2 Read QUERY arguments
 
 =over 4
-
-=item Remove parentheses around single items
-
-When a parenthesis with a single term or subquery occurs anywhere in QUERY, the
-outer parentheses should be removed.
 
 =item Move negation to leaf nodes
 
