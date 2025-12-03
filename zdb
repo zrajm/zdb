@@ -12,7 +12,7 @@ use charnames qw(:full :short);  # unneeded in v5.16
 my %opt;
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.12';                         # https://semver.org/
+our $VERSION='0.7.13';                         # https://semver.org/
 our $VERSION_DATE='3 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -296,15 +296,14 @@ sub record {
     }
     sub peek { return shift()->[-1]         }  # get last stack item
     sub last { return shift()->peek()->[-1] }  # last word in last stack item
-    # Remove empty word at end of last stack item (if any).
+    # Strip any trailing empty word/parenthesis in last stack item.
     sub trim {
         my ($self) = @_;
         my $last = $self->last();
         my $peek = $self->peek();
-        # Trim any empty item from the end of last stack entry.
-        pop @{$self->peek()} if @$peek > 1     #
-            and $last->[0]{type} eq 'word'     #   is word
-            and @$last == 1;                   #   with no content
+        pop @$peek                             # strip trailing term/paren
+            if @$peek > 1                      #   if stack entry isn't empty
+            and @$last == 1;                   #   and last term/paren is empty
         return $self;
     }
     sub push {
@@ -319,9 +318,10 @@ sub record {
         return $self;
     }
     sub pop {                                  # get last entry (and remove)
-        my ($self) = @_;
+        my ($self, $done) = @_;
         $self->trim();
         pop @$self;
+        return $self if $done;                 # cleanup phase = abort
         #
         # FIXME: Currently stack is `[[QUERY], stack1, stack2, etc]`. If
         # `[QUERY]` is replaced by plain `QUERY`. We could just unshift the
@@ -471,7 +471,8 @@ sub record {
                 'STACK: ', debug($stack), "\n")
                 if $opt{verbose};
         }
-        return $stack->trim()->[0][0];
+        $stack->pop(1) until @$stack == 1;
+        return $stack->[0][0];
     }
 
     # Returns a matcher function. Matcher function takes two args ($field name &
@@ -596,7 +597,7 @@ sub record {
             # unified_diff();
             #eq_or_diff_data($have, $want, $msg, { context => 1 })
             my $have = _parse($query_str);
-            is_deeply($have, $want, "query: $query_str" . ($msg && " -- $msg"))
+            is_deeply($have, $want, "query: «$query_str»" . ($msg && " -- $msg"))
                 or diag("\e[41mHAVE: ${\debug($have)}\e[m\n",
                         "\e[42mWANT: ${\debug($want)}\e[m\n");
         }
@@ -671,7 +672,7 @@ sub record {
         state sub or  { [{ type => 'or',  field => '', not => '' }, @_] }
         state sub and { [{ type => 'and', field => '', not => '' }, @_] }
         note('QUERY BASICS');
-        query_is(''      => or(and()));
+        query_is(''      => or());
         query_is('a'     => or(and(word('a'))));
         query_is('ab'    => or(and(word('ab'))));
         query_is('-ab'   => or(and(word('ab', not => 1))), 'negated');
@@ -695,18 +696,18 @@ sub record {
         query_is('((a,b))' => or(and(or(and(or(and(word('a')), and(word('b'))))))));
 
         note('UNBALANCED PARENTHESES');
-        query_is( ') '     => or(and(or(and()))));
-        query_is( ')'      => or(and(or(and()))));
-        query_is( ') b'    => or(and(or(and(), word('b')))));
+        query_is( ') '     => or());
+        query_is( ')'      => or());
+        query_is( ') b'    => or(and(or(word('b')))));
         query_is('a) b'    => or(and(or(and(word('a')), word('b')))));
         query_is('a)'      => or(and(or(and(word('a'))))));
         query_is('a))'     => or(and(or(and(word('a'))))));
         query_is('a)b'     => or(and(or(and(word('a')), word('b')))));
         query_is('a)b)c'   => or(and(or(and(word('a')), word('b'))), word('c')));
         query_is('a)b)c)'  => or(and(or(and(or(and(word('a')), word('b'))), word('c')))));
-        query_is( ')b'     => or(and(or(and(), word('b')))));
-        query_is( '),b'    => or(and(or(and()), and(word('b')))));
-        query_is('a),'     => or(and(or(and(word('a'))), and())));
+        query_is( ')b'     => or(and(or(word('b')))));
+        query_is( '),b'    => or(and(and(word('b')))));
+        query_is('a),'     => or(and(or(and(word('a'))))));
         query_is('a),b'    => or(and(or(and(word('a'))), and(word('b')))));
 
         query_is( '(b'     => or(and(or(and(word('b'))))));
@@ -1446,6 +1447,11 @@ Documented the future of the query parsing.
 
 [2025-12-03 08:04-08:12] v0.7.12 - Removed unused query cleanup function.
 
+[2025-12-03 08:12-09:20] v0.7.13 - Now removes empty terms in QUERY during
+parsing. This continually cleans up both empty search words (which are inserted
+as part of the query parsing itself) and empty parentheses as the query is
+being parsed.
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1542,11 +1548,6 @@ comments that will be fixed in the future as well.)
 
 =over 4
 
-=item Remove empty parentheses in QUERY
-
-Do this recursively so that parentheses that contain only empty parentheses are
-also removed. (Should be added to the B<trim()> function of B<Query::Stack>?)
-
 =item Remove parentheses around single items
 
 When a parenthesis with a single term or subquery occurs anywhere in QUERY, the
@@ -1559,6 +1560,8 @@ search terms, not at the parenthesis level. Doing so means that any one search
 term is only even negated once (= B<Negation Normal Form> or B<NNF>), which is
 needed for highlighting of search results to work. (If not using the NNF forms,
 some search terms which are negated twice would not be highlighted.)
+
+=item Update L</INTERNALS> for query format
 
 =back
 
