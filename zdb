@@ -12,8 +12,8 @@ use charnames qw(:full :short);  # unneeded in v5.16
 my %opt;
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.11';                         # https://semver.org/
-our $VERSION_DATE='2 December 2025';
+our $VERSION='0.7.12';                         # https://semver.org/
+our $VERSION_DATE='3 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -346,7 +346,7 @@ sub record {
     #my $query = [[], []];
     sub new {
         my ($class, $query_str) = @_;
-        my $query = _cleanup(_parse($query_str)) // [];
+        my $query = _parse($query_str) // [];
         my $self = { query => $query };
         return bless($self, $class);
     }
@@ -468,41 +468,10 @@ sub record {
             }($last, $chr);
             say("----------------------------------------\n",
                 "READ : '$chr'\n",
-                'STACK: ', debug($stack), "\n",
-                'CLEAN: ', debug([[_cleanup($stack->[0][0])]]))
+                'STACK: ', debug($stack), "\n")
                 if $opt{verbose};
         }
         return $stack->trim()->[0][0];
-    }
-
-    # FIXME: Push negations downwards/towards tree leaves
-    # Negation Normal Form (NNF) -- needed for highlighting to work
-    sub _cleanup {
-        my ($query) = @_;
-        local $_ = ref($query);
-        # FORMAT: [{metadata}, data1, data2...]
-        if (/^ARRAY$/ and ref($query->[0]) eq 'HASH') { # PARENTHESIS
-            my ($meta, @data) = @$query;
-            @data = map { _cleanup($_) } @data;
-            if (@data == 0) { return () }         #   empty parenthesis
-            if (@data == 1) {                     #   one item parenthesis
-                my ($item) = @data;
-                my ($itemmeta) = ref $item eq 'ARRAY' ? @$item :
-                                 ref $item eq 'HASH'  ?  $item : return $query;
-                # $itemmeta is a ref, so this updates $item.
-                $itemmeta->{not}   = $meta->{not}   ne $itemmeta->{not};
-                $itemmeta->{field} = $meta->{field} ne $itemmeta->{field};
-                return $item;
-            }
-            return [$meta, @data];
-        }
-        # FORMAT: {_: [...]}
-        if (/^HASH$/) {                           # WORD
-            my %data = %$query;
-            return () if @{$data{_}} == 0;    #   no word data
-            return $query;
-        }
-        return $query;
     }
 
     # Returns a matcher function. Matcher function takes two args ($field name &
@@ -1475,6 +1444,8 @@ element is a metadata hashref.
 [2025-12-02 22:38-22:58] v0.7.11 - Renamed a B<Query::Stack> function.
 Documented the future of the query parsing.
 
+[2025-12-03 08:04-08:12] v0.7.12 - Removed unused query cleanup function.
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1569,14 +1540,19 @@ comments that will be fixed in the future as well.)
 
 =head2 Read QUERY arguments
 
-=over 2
+=over 4
 
-=item * Remove empty parentheses in QUERY
+=item Remove empty parentheses in QUERY
 
 Do this recursively so that parentheses that contain only empty parentheses are
 also removed. (Should be added to the B<trim()> function of B<Query::Stack>?)
 
-=item * Move negation to leaves
+=item Remove parentheses around single items
+
+When a parenthesis with a single term or subquery occurs anywhere in QUERY, the
+outer parentheses should be removed.
+
+=item Move negation to leaf nodes
 
 If a parenthesis is negated the negation should be applied to the leaves of the
 search terms, not at the parenthesis level. Doing so means that any one search
