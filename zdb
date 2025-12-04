@@ -12,7 +12,7 @@ use charnames qw(:full :short);  # unneeded in v5.16
 my %opt;
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.17';                         # https://semver.org/
+our $VERSION='0.7.18';                         # https://semver.org/
 our $VERSION_DATE='4 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -620,13 +620,19 @@ sub record {
             my $have = _parse($query_str);
             local $Test::Builder::Level = $Test::Builder::Level + 2;
             is_deeply($have, $want, "query: «$query_str»" . ($msg && " ($msg)"))
-                or diag("\e[41mHAVE: ${\debug($have)}\e[m\n",
-                        "\e[42mWANT: ${\debug($want)}\e[m\n");
+                or diag("\e[41mHAVE: ${\debug($have)}\e[49m\n",
+                        "\e[42mWANT: ${\debug($want)}\e[49m\n");
         }
         state sub TODO($&@) {
             my ($msg, $coderef, @args) = @_;
             local $TODO = 'Not Yet Implemented';
-            subtest("TODO $msg", $coderef, @args);
+            print STDERR "\e[33m";
+            Test::More::subtest("TODO $msg", $coderef, @args);
+            print STDERR "\e[39m";
+        }
+        state sub subtest($&@) {
+            my ($msg, $coderef, @args) = @_;
+            Test::More::subtest($msg, $coderef, @args);
         }
 
         state sub f { shift () }               # return 1st arg as-is
@@ -702,78 +708,180 @@ sub record {
         state sub and { [{ type => 'and', field => 0, not => 0 }, @_] }
         state sub neg   { $_->[0]{not}   = 1 for @_; @_ }
         state sub field { $_->[0]{field} = 1 for @_; @_ }
-        note('QUERY BASICS');
-        query_is(''      => or());
-        query_is('a'     => word('a'));
-        query_is('ab'    => word('ab'));
-        query_is('-ab'   => neg(word('ab')), 'negated');
-        query_is('--ab'  => word('ab'), 'double negation = none');
-        query_is('---ab' => neg(word('ab')), 'negated');
-        query_is('=ab'   => field(word('ab')), 'field search');
-        query_is('==ab'  => word('ab'), 'double field search = none');
-        query_is('===ab' => field(word('ab')), 'field search');
-        query_is('a b'   => and(word('a'), word('b')), 'and');
-        query_is('a,b'   => or(word('a'), word('b')), 'or');
-        query_is('a b,c' => or(and(word('a'), word('b')), word('c')), 'priority');
-        query_is('a,b c' => or(word('a'), and(word('b'), word('c'))), 'priority');
-        query_is('a -b,c' => or(and(word('a'), neg word('b')), word('c')), 'priority');
-        query_is('a,-b c' => or(word('a'), and(neg(word('b')), word('c'))), 'priority');
 
-        note('PARENTHESIS IN QUERY');
-        query_is('(a)'     => word('a'));
-        query_is('(a)b'    => and(word('a'), word('b')));
-        query_is('(a b)'   => and(word('a'), word('b')));
-        query_is('(a,b)'   => or(word('a'), word('b')));
-        query_is('((a,b))' => or(word('a'), word('b')));
-
-        note('UNBALANCED PARENTHESES');
-        query_is( ') '     => or());
-        query_is( ')'      => or());
-        query_is( ') b'    => word('b'));
-        query_is('a) b'    => and(word('a'), word('b')));
-        query_is('a)'      => word('a'));
-        query_is('a))'     => word('a'));
-        query_is('a)b'     => and(word('a'), word('b')));
-        query_is('a)b)c'   => and(word('a'), word('b'), word('c')));
-        query_is('a)b)c)'  => and(word('a'), word('b'), word('c')));
-        query_is( ')b'     => word('b'));
-        query_is( '),b'    => word('b'));
-        query_is('a),'     => word('a'));
-        query_is('a),b'    => or(word('a'), word('b')));
-
-        query_is( '(b'     => word('b'));
-        query_is('a(b'     => and(word('a'), word('b')));
-        query_is('((c'     => word('c'));
-        query_is('a(b(c'   => and(word('a'), and(word('b'), word('c'))));
-        query_is('a(b(c,'  => and(word('a'), and(word('b'), word('c'))));
-        query_is('a(b,(c'  => and(word('a'), or(word('b'), word('c'))));
-
-        note('QUOTED STRINGS');
-        query_is('"()"'  => word('()'));
-        query_is('-"a"'  => neg(word('a')));
-        query_is('"-a"'  => word('-a'));
-        query_is('-"-a"' => neg(word('-a')));
-
-        note('NEGATION PROPAGATION');
-        query_is('-a'      => neg(word('a')));
-        query_is('--a'     => word('a'), 'means «a»');
-        query_is('-(a)'    => neg(word('a')), 'means «-a»');
-        query_is('-(-a)'   => word('a'), 'means «a»');
-        query_is('-(a -b)' => neg(and(word('a'), neg word('b'))), 'means «(-a,b)» -- FIXME De Morgan');
-        query_is('-(a,-b)' => neg(or(word('a'), neg(word('b')))), 'means «(-a b)» -- FIXME De Morgan');
-
-        TODO "Push 'not' to leaf nodes" => sub {
-            query_is('-(a -b)' => or(neg(word('a')), word('b')), 'means «(-a,b)»');
-            query_is('-(a,-b)' => or(neg(word('a')), word('b')), 'means «(-a b)»');
+        subtest 'QUERY BASICS' => sub {
+            query_is(''      => or());
+            query_is('a'     => word('a'));
+            query_is('ab'    => word('ab'));
+            query_is('-ab'   => neg(word('ab')), 'negated');
+            query_is('--ab'  => word('ab'), 'double negation = none');
+            query_is('---ab' => neg(word('ab')), 'negated');
+            query_is('=ab'   => field(word('ab')), 'field search');
+            query_is('==ab'  => word('ab'), 'double field search = none');
+            query_is('===ab' => field(word('ab')), 'field search');
+            query_is('a b'   => and(word('a'), word('b')), 'and');
+            query_is('a,b'   => or(word('a'), word('b')), 'or');
+            query_is('a b,c' => or(and(word('a'), word('b')), word('c')), 'priority');
+            query_is('a,b c' => or(word('a'), and(word('b'), word('c'))), 'priority');
+            query_is('a -b,c' => or(and(word('a'), neg word('b')), word('c')), 'priority');
+            query_is('a,-b c' => or(word('a'), and(neg(word('b')), word('c'))), 'priority');
         };
-        note('FIELD PROPAGATION');
-        query_is('=(a)'    => field(word('a')), 'means «=a»');
-        query_is('=(=a)'   => word('a'), 'means «a»');
-        query_is('=(a =b)' => field(and(word('a'), field word('b'))), 'means «=a b» FIXME');
-        query_is('=(a,=b)' => field(or(word('a'), field(word('b')))), 'means «=a,b» FIXME');
-        TODO "Push 'field' to leaf nodes" => sub {
-            query_is('=(a =b)' => and(field(word('a')), word('b')), 'means «=a b»');
-            query_is('=(a,=b)' => or(field(word('a')), word('b')), 'means «=a,b»');
+        subtest 'PARENTHESIS IN QUERY' => sub {
+            query_is('(a)'     => word('a'));
+            query_is('(a)b'    => and(word('a'), word('b')));
+            query_is('(a b)'   => and(word('a'), word('b')));
+            query_is('(a,b)'   => or(word('a'), word('b')));
+            query_is('((a,b))' => or(word('a'), word('b')));
+        };
+        subtest 'UNBALANCED PARENTHESES' => sub {
+            query_is( ') '     => or());
+            query_is( ')'      => or());
+            query_is( ') b'    => word('b'));
+            query_is('a) b'    => and(word('a'), word('b')));
+            query_is('a)'      => word('a'));
+            query_is('a))'     => word('a'));
+            query_is('a)b'     => and(word('a'), word('b')));
+            query_is('a)b)c'   => and(word('a'), word('b'), word('c')));
+            query_is('a)b)c)'  => and(word('a'), word('b'), word('c')));
+            query_is( ')b'     => word('b'));
+            query_is( '),b'    => word('b'));
+            query_is('a),'     => word('a'));
+            query_is('a),b'    => or(word('a'), word('b')));
+
+            query_is( '(b'     => word('b'));
+            query_is('a(b'     => and(word('a'), word('b')));
+            query_is('((c'     => word('c'));
+            query_is('a(b(c'   => and(word('a'), and(word('b'), word('c'))));
+            query_is('a(b(c,'  => and(word('a'), and(word('b'), word('c'))));
+            query_is('a(b,(c'  => and(word('a'), or(word('b'), word('c'))));
+        };
+        subtest 'QUOTED STRINGS' => sub {
+            query_is('"()"'  => word('()'));
+            query_is('-"a"'  => neg(word('a')));
+            query_is('"-a"'  => word('-a'));
+            query_is('-"-a"' => neg(word('-a')));
+        };
+        subtest 'NEGATION PROPAGATION' => sub {
+            query_is('-a'      => neg(word('a')));
+            query_is('--a'     => word('a'), 'means «a»');
+            query_is('-(a)'    => neg(word('a')), 'means «-a»');
+            query_is('-(-a)'   => word('a'), 'means «a»');
+            query_is('-(a -b)' => neg(and(word('a'), neg word('b'))), 'means «(-a,b)» -- FIXME De Morgan');
+            query_is('-(a,-b)' => neg(or(word('a'), neg(word('b')))), 'means «(-a b)» -- FIXME De Morgan');
+            TODO "Push 'not' to leaf nodes" => sub {
+                query_is('-(a -b)' => or(neg(word('a')), word('b')), 'means «(-a,b)»');
+                query_is('-(a,-b)' => or(neg(word('a')), word('b')), 'means «(-a b)»');
+            };
+        };
+        subtest 'FIELD PROPAGATION' => sub {
+            query_is('=(a)'    => field(word('a')), 'means «=a»');
+            query_is('=(=a)'   => word('a'), 'means «a»');
+            query_is('=(a =b)' => field(and(word('a'), field word('b'))), 'means «=a b» FIXME');
+            query_is('=(a,=b)' => field(or(word('a'), field(word('b')))), 'means «=a,b» FIXME');
+            TODO "Push 'field' to leaf nodes" => sub {
+                query_is('=(a =b)' => and(field(word('a')), word('b')), 'means «=a b»');
+                query_is('=(a,=b)' => or(field(word('a')), word('b')), 'means «=a,b»');
+            };
+        };
+
+        diag("SLOPPY QUERY TESTS\n",
+             '(from https://zrajm.org/teckentranskription/lexicon-tests.html)');
+        subtest '1. Simplest tests' => sub {
+            query_is('a'      => word('a'),                      '1.1');
+            query_is('-a'     => neg(word('a')),                 '1.2');
+            query_is('a b'    => and(word('a'), word('b')),      '1.3');
+            query_is('(a b)'  => and(word('a'), word('b')),      '1.4');
+            query_is('-(a b)' => neg(and(word('a'), word('b'))), '1.5');
+        };
+        subtest '2. Missing start parenthesis' => sub {
+            query_is('a)' => word('a'), '2.1');
+            query_is('a b)' => and(word('a'), word('b')), '2.2');
+            query_is('a b) c' => and(word('a'), word('b'), word('c')), '2.3');
+            TODO "EXPECTED (should work, but doesn't)" => sub {
+                query_is('a, b) c'  => and(or(word('a'), word('b')), word('c')), '2.4');
+                query_is('a b), c' => or(and(word('a'), word('b')), word('c')), '2.5');
+                query_is('a, b), c' => or(or(word('a'), word('b')), word('c')), '2.6');
+                query_is('a, b), c d' => or(or(word('a'), word('b')), and(word('c'), word('d'))), '2.7');
+                query_is('a, b) (c, d)' => and(or(word('a'), word('b')), or(word('c'), word('d'))), '2.8');
+            };
+            query_is('(a, b) c' => and(or(word('a'), word('b')), word('c')), '2.4b INCORRECT -- replace by above TODO');
+            query_is('(a b), c' => or(and(word('a'), word('b')), word('c')), '2.5b INCORRECT -- replace by above TODO');
+            query_is('(a, b), c' => or(or(word('a'), word('b')), word('c')), '2.6b INCORRECT -- replace by above TODO');
+            query_is('(a, b), c d' => or(or(word('a'), word('b')), and(word('c'), word('d'))), '2.7b INCORRECT -- replace by above TODO');
+            query_is('(a, b) (c, d)' => and(or(word('a'), word('b')), or(word('c'), word('d'))), '2.8b INCORRECT -- replace by above TODO');
+        };
+        subtest '3. Missing end parenthesis' => sub {
+            query_is('(a' => word('a'), '3.1');
+            query_is('(a b)' => and(word('a'), word('b')), '3.2');
+            TODO "EXPECTED (should work, but doesn't)" => sub {
+                query_is('a (b c' => and(word('a'), word('b'), word('c')), '3.3');
+            };
+            query_is('a (b c' => and(word('a'), and(word('b'), word('c'))), '3.3b INCORRECT -- replace by above TODO');
+            query_is('a, (b c' => or(word('a'), and(word('b'), word('c'))), '3.4');
+            query_is('a (b, c' => and(word('a'), or(word('b'), word('c'))), '3.5');
+            TODO "EXPECTED (should work, but doesn't)" => sub {
+                query_is('a, (b, c' => or(word('a'), word('b'), word('c')), '3.6');
+                query_is('a b, (c, d' => or(and(word('a'), word('b')), word('c'), word('d'), '3.7'));
+            };
+            query_is('a, (b, c' => or(word('a'), or(word('b'), word('c'))), '3.6b INCORRECT -- replace by above TODO');
+            query_is('a b, (c, d' => or(and(word('a'), word('b')), or(word('c'), word('d'))), '3.7b INCORRECT -- replace by above TODO');
+            query_is('(a, b) (c, d' => and(or(word('a'), word('b')), or(word('c'), word('d'))), '3.8');
+        };
+        subtest '4. Explicit parens' => sub {
+            TODO "EXPECTED (should work, but doesn't)" => sub {
+                query_is('a, b) c' => and(or(word('a'), word('b')), word('c')), '4.1');
+            };
+            query_is('(a, b) c' => and(or(word('a'), word('b')), word('c')), '4.1b INCORRECT -- replace by above TODO');
+            query_is('a, b c' => or(word('a'), and(word('b'), word('c'))), '4.2');
+            query_is('a b, c' => or(and(word('a'), word('b')), word('c')), '4.3');
+            query_is('(a b), c' => or(and(word('a'), word('b')), word('c')), '4.4');
+            query_is('(a, b) c' => and(or(word('a'), word('b')), word('c')), '4.5');
+        };
+        subtest '5. Implicit parens' => sub {
+            query_is('a b, c' => or(and(word('a'), word('b')), word('c')), '5.1');
+            query_is('a, b c' => or(word('a'), and(word('b'), word('c'))), '5.2');
+            query_is('a b c, d' => or(and(word('a'), word('b'), word('c')), word('d')), '5.3');
+            query_is('a, b c d' => or(word('a'), and(word('b'), word('c'), word('d'))), '5.4');
+            query_is('a b, c d' => or(and(word('a'), word('b')), and(word('c'), word('d'))), '5.5');
+            query_is('a b c, d e f' => or(and(word('a'), word('b'), word('c')), and(word('d'), word('e'), word('f'))), '5.6');
+            query_is('a, b c, d' => or(word('a'), and(word('b'), word('c')), word('d')), '5.7');
+            query_is('a b, c d e, f g' => or(and(word('a'), word('b')), and(word('c'), word('d'), word('e')), and(word('f'), word('g'))), '5.8');
+            query_is('a b, c' => or(and(word('a'), word('b')), word('c')), '5.9');
+            query_is('((a, b c) e, f)' => or(and(or(word('a'), and(word('b'), word('c'))), word('e')), word('f')), '5.10');
+            TODO "EXPECTED (should work, but doesn't)" => sub {
+                query_is('((a b, c), e f)' => or(and(word('a'), word('b')), word('c'), and(word('e'), word('f'))), '5.11');
+            };
+            query_is('((a b, c), e f)' => or(or(and(word('a'), word('b')), word('c')), and(word('e'), word('f'))), '5.11b INCORRECT -- replace by above TODO');
+        };
+        subtest '6. Single item in parenthesis' => sub {
+            query_is('a' => word('a'), '6.1');
+            query_is('-a' => neg(word('a')), '6.2');
+            query_is('--a' => word('a'), '6.3');
+            query_is('---a' => neg(word('a')), '6.4');
+            query_is('(a)' => word('a'), '6.5');
+            query_is('(-a)' => neg(word('a')), '6.6');
+            query_is('-(a)' => neg(word('a')), '6.7');
+            query_is('-(-a)' => word('a'), '6.8');
+            query_is('(-(-a))' => word('a'), '6.9');
+            query_is('-(-(-a))' => neg(word('a')), '6.10');
+        };
+        subtest '7. Removal of empty paren' => sub {
+            query_is('a () b' => and(word('a'), word('b')), '7.1');
+            query_is('a -() b' => and(word('a'), word('b')), '7.2');
+        };
+        subtest '8. Leading space or comma should not affect paren' => sub {
+            query_is('(,a b)' => and(word('a'), word('b')), '8.1');
+            query_is('( a,b)' => or(word('a'), word('b')), '8.2');
+        };
+        subtest '9. Unwrapping of parenthesis with same AND/OR as parent' => sub {
+            TODO "EXPECTED (should work, but doesn't)" => sub {
+                query_is('(a b) c' => and(word('a'), word('b'), word('c')), '9.1');
+                query_is('a (b c)' => and(word('a'), word('b'), word('c')), '9.2');
+                query_is('(a, b), c' => or(word('a'), word('b'), word('c')), '9.3');
+            };
+            query_is('(a b) c' => and(and(word('a'), word('b')), word('c')), '9.1b INCORRECT -- replace by above TODO');
+            query_is('a (b c)' => and(word('a'), and(word('b'), word('c'))), '9.2b INCORRECT -- replace by above TODO');
+            query_is('(a, b), c' => or(or(word('a'), word('b')), word('c')), '9.3b INCORRECT -- replace by above TODO');
         };
         done_testing();
     }
@@ -941,7 +1049,7 @@ $pager_pid = open(STDOUT, '|-', $opt{pager})   # send all STDOUT through pager
 # FIXME: Parse each query separately (to resolve unfinished parens etc) then join.
 my $query = new Query(join(',', @query));
 
-say 'FINAL: ', Query::debug([[$query->{query}]]);
+say 'FINAL: ', Query::debug($query->{query});
 
 __END__
 
@@ -1505,6 +1613,10 @@ of the removed parenthesis and the term are combined.
 
 [2025-12-03 23:46-00:51] v0.7.17 - Prettier B<--test> output.
 
+[2025-12-04 07:50-12:14] v0.7.18 - Improved unit tests. Borrowed unit tests
+from my old 'sloppy query language' used in my online Swedish Sign Language
+dictionary (https://zrajm.org/teckentranskription/lexicon-tests.html).
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1601,13 +1713,23 @@ comments that will be fixed in the future as well.)
 
 =over 4
 
-=item Move negation to leaf nodes
+=item Move '-' (negation) and '=' (exact field match) to query leaf nodes
 
 If a parenthesis is negated the negation should be applied to the leaves of the
 search terms, not at the parenthesis level. Doing so means that any one search
 term is only even negated once (= B<Negation Normal Form> or B<NNF>), which is
 needed for highlighting of search results to work. (If not using the NNF forms,
 some search terms which are negated twice would not be highlighted.)
+
+=item BUG: Fix implicit leading parentheses
+
+Applies mostly to missing B<(> at beginning of query string, but also (to lesser
+degree) to missing B<)> at the end.---See failing unit tests.
+
+=item Unwrap parentheses with same AND/OR as parent
+
+Nice-to-have, but not really B<important> in any way (if implemented queries
+will become faster.)
 
 =item Update L</INTERNALS> for query format
 
