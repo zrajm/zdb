@@ -12,8 +12,8 @@ use charnames qw(:full :short);  # unneeded in v5.16
 my %opt;
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.18';                         # https://semver.org/
-our $VERSION_DATE='4 December 2025';
+our $VERSION='0.7.19';                         # https://semver.org/
+our $VERSION_DATE='5 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -362,7 +362,7 @@ sub record {
     #my $query = [[], []];
     sub new {
         my ($class, $query_str) = @_;
-        my $query = _parse($query_str) // [];
+        my $query = _normalize(_parse($query_str)) // [];
         my $self = { query => $query };
         return bless($self, $class);
     }
@@ -496,6 +496,27 @@ sub record {
         return $stack->[0][0];
     }
 
+    # Normalize '-' ('not') and '=' ('field') prefixes in query by pushing them
+    # out into the leaf nodes, this converts query to Negation Normal Form.
+    sub _normalize {
+        my ($term, $not, $field) = @_;
+        return $term unless ref $term;         # not parenthesis/word
+        state %flip = (and => 'or', or => 'and');
+        my ($meta, @data) = @$term;
+        $not   = ($not   // 0) ^ $meta->{not};
+        $field = ($field // 0) ^ $meta->{field};
+        return [$meta->{type} ne 'word' ? {
+            %$meta,
+            type  => ($not ? $flip{$meta->{type}} : $meta->{type}),
+            not   => 0,
+            field => 0,
+        } : {
+            %$meta,
+            not   => $not,
+            field => $field,
+        }, map { _normalize($_, $not, $field) } @data];
+    }
+
     # Returns a matcher function. Matcher function takes two args ($field name &
     # $value) and returns true/false. If called without args it returns a structure
     # to describe itself.
@@ -607,32 +628,31 @@ sub record {
     sub test {
         require Test::More;                    # load at runtime
         import Test::More;                     #   (not compile time)
+        sub subtest;
         our $TODO;
         Test::More->builder->todo_output(\(my $x)); # no errors on TODO tests
+        # Modify 'is_deeply()' for better diagnostics.
+        state sub is_deeply {
+            my ($have, $want, $msg) = @_;
+            local $Test::Builder::Level = $Test::Builder::Level + 1;
+            Test::More::is_deeply($have, $want, $msg)
+                or diag("\e[41mHAVE: ${\debug($have)}\e[49m\n",
+                        "\e[42mWANT: ${\debug($want)}\e[49m\n");
+        }
         state sub query_is {
             my ($query_str, $want, $msg) = @_;
             $query_str //= '';
             $msg       //= '';
-            # require Test::Differences;
-            # import Test::Differences;
-            # unified_diff();
-            #eq_or_diff_data($have, $want, $msg, { context => 1 })
-            my $have = _parse($query_str);
-            local $Test::Builder::Level = $Test::Builder::Level + 2;
-            is_deeply($have, $want, "query: «$query_str»" . ($msg && " ($msg)"))
-                or diag("\e[41mHAVE: ${\debug($have)}\e[49m\n",
-                        "\e[42mWANT: ${\debug($want)}\e[49m\n");
+            local $Test::Builder::Level = $Test::Builder::Level + 1;
+            is_deeply(_parse($query_str), $want,
+                      "query: «$query_str»" . ($msg && " ($msg)"));
         }
-        state sub TODO($&@) {
+        state sub TODO {
             my ($msg, $coderef, @args) = @_;
             local $TODO = 'Not Yet Implemented';
             print STDERR "\e[33m";
             Test::More::subtest("TODO $msg", $coderef, @args);
             print STDERR "\e[39m";
-        }
-        state sub subtest($&@) {
-            my ($msg, $coderef, @args) = @_;
-            Test::More::subtest($msg, $coderef, @args);
         }
 
         state sub f { shift () }               # return 1st arg as-is
@@ -706,9 +726,45 @@ sub record {
         }
         state sub or  { [{ type => 'or',  field => 0, not => 0 }, @_] }
         state sub and { [{ type => 'and', field => 0, not => 0 }, @_] }
-        state sub neg   { $_->[0]{not}   = 1 for @_; @_ }
-        state sub field { $_->[0]{field} = 1 for @_; @_ }
+        state sub neg   { my $x = shift; die "Too many args" if @_; $x->[0]{not}   = 1; $x }
+        state sub field { my $x = shift; die "Too many args" if @_; $x->[0]{field} = 1; $x }
 
+        subtest 'QUERY NORMALIZATION (-> NEGATION NORMAL FORM)' => sub {
+            subtest "Atoms (=don't modify)" => sub {
+                is_deeply(_normalize(word()), word(), '«x»');
+                is_deeply(_normalize(neg(word())), neg(word()), '«-x»');
+                is_deeply(_normalize(field(word())), field(word()), '«=x»');
+                is_deeply(_normalize(neg(field(word()))), neg(field(word())), '«-=x»');
+            };
+            subtest "Atoms + 'not' arg (=set 'not' attribute)" => sub {
+                is_deeply(_normalize(word(), 1), neg(word()), '«x» -> «-x»');
+                is_deeply(_normalize(neg(word()), 1), word(), '«-x» -> «x»');
+                is_deeply(_normalize(field(word()), 1), neg(field(word())), '«=x» -> «-=x»');
+                is_deeply(_normalize(neg(field(word())), 1), field(word()), '«-=x» -> «=x»');
+            };
+            subtest "Atoms + 'field' arg (=set 'field' attribute)" => sub {
+                is_deeply(_normalize(word(), 0, 1), field(word()), '«x» -> «=x»');
+                is_deeply(_normalize(neg(word()), 0, 1), neg(field(word())), '«-x» -> «-=x»');
+                is_deeply(_normalize(field(word()), 0, 1), word(), '«=x» -> «x»');
+                is_deeply(_normalize(neg(field(word())), 0, 1), neg(word()), '«-=x» -> «-x»');
+            };
+            subtest "Atoms + both 'not' and 'field' arg (=set both attributes)" => sub {
+                is_deeply(_normalize(word(), 1, 1), neg(field(word())), '«x» -> «-=x»');
+                is_deeply(_normalize(neg(word()), 1, 1), field(word()), '«-x» -> «=x»');
+                is_deeply(_normalize(field(word()), 1, 1), neg(word()), '«=x» -> «-x»');
+                is_deeply(_normalize(neg(field(word())), 1, 1), word(), '«-=x» -> «x»');
+            };
+            subtest "Simple parentheses (De Morgan's Law + 'field' attribute)" => sub {
+                is_deeply(_normalize(      and(word('a'),    neg(word('b')) )), and(      word('a'),    neg(word('b'))), '« ( a -b)» -> «( a -b)»');
+                is_deeply(_normalize(  neg(and(word('a'),    neg(word('b'))))),  or(  neg(word('a')),       word('b') ), '«-( a -b)» -> «(-a, b)»');
+                is_deeply(_normalize(       or(word('a'),    neg(word('b')) )),  or(      word('a'),    neg(word('b'))), '« ( a,-b)» -> «( a,-b)»');
+                is_deeply(_normalize(  neg( or(word('a'),    neg(word('b'))))), and(  neg(word('a')),       word('b') ), '«-( a,-b)» -> «(-a  b)»');
+                is_deeply(_normalize(      and(word('a'),  field(word('b')) )), and(      word('a'),  field(word('b'))), '« ( a =b)» -> «( a =b)»');
+                is_deeply(_normalize(field(and(word('a'),  field(word('b'))))), and(field(word('a')),       word('b') ), '«=( a =b)» -> «(=a  b)»');
+                is_deeply(_normalize(       or(word('a'),  field(word('b')) )),  or(      word('a'),  field(word('b'))), '« ( a,=b)» -> «( a,=b)»');
+                is_deeply(_normalize(field( or(word('a'),  field(word('b'))))),  or(field(word('a')),       word('b') ), '«=( a,=b)» -> «(=a, b)»');
+            };
+        };
         subtest 'QUERY BASICS' => sub {
             query_is(''      => or());
             query_is('a'     => word('a'));
@@ -979,7 +1035,8 @@ local %SIG = (
     __WARN__ => sub { warn("$PROGRAM: @_") },
     __DIE__  => sub {
         die @_ if $^S;                         # abort if called inside eval
-        my $tip = (my $msg = "@_") =~ s/\.$//; # ending in '.' = extra help
+        # Perl can insert 'at FILE line NUM.': Don't add tips for that.
+        my $tip = (my $msg = "@_") =~ s/(?<!\d)\.$//; # ends in '.' = show tip
         die("$PROGRAM: $msg",
             $tip ? "Try '$PROGRAM --help' for more information.\n" : ());
     });
@@ -1549,7 +1606,8 @@ updated usage string to reflect this.
 
 [2025-11-26 19:20-19:23] v0.6.4 - Corrected B</bin/env> -> B</usr/bin/env>.
 
-[2025-11-29 00:13-00:25] v0.6.5 - Added note about hierarchical fields to FUTURE.
+[2025-11-29 00:13-00:25] v0.6.5 - Added note about hierarchical fields to
+FUTURE.
 
 [2025-11-28 18:30-13:45] v0.7.0 - Added some preliminary query parsing and
 started working on tests for the same. Code is currently in a non-functional
@@ -1613,9 +1671,17 @@ of the removed parenthesis and the term are combined.
 
 [2025-12-03 23:46-00:51] v0.7.17 - Prettier B<--test> output.
 
-[2025-12-04 07:50-12:14] v0.7.18 - Improved unit tests. Borrowed unit tests
-from my old 'sloppy query language' used in my online Swedish Sign Language
-dictionary (https://zrajm.org/teckentranskription/lexicon-tests.html).
+[2025-12-04 07:50-12:14] v0.7.18 - Added a slew of unit tests. Unit tests were
+taken from my online Swedish Sign Language dictionary, which implement a very
+similar (sloppy) query language
+(L<https://zrajm.org/teckentranskription/lexicon-tests.html>).
+
+[2025-12-04 00:56-01:49, 17:24-17:51, 18:06-18:23], [2025-12-05 09:05-12:39]
+v0.7.19 - Implemented query B<_normalize()>, which moves query prefixes C<B<->>
+and C<B<=>> to the leaf nodes of the query, applying De Morgan's Law. This
+makes sure that match highlighting works, by no query term negated more than
+once. Also added the tests required to test the new function, and adapted the
+test functions for this.
 
 
 =head1 COPYRIGHT AND LICENSE
@@ -1713,14 +1779,6 @@ comments that will be fixed in the future as well.)
 
 =over 4
 
-=item Move '-' (negation) and '=' (exact field match) to query leaf nodes
-
-If a parenthesis is negated the negation should be applied to the leaves of the
-search terms, not at the parenthesis level. Doing so means that any one search
-term is only even negated once (= B<Negation Normal Form> or B<NNF>), which is
-needed for highlighting of search results to work. (If not using the NNF forms,
-some search terms which are negated twice would not be highlighted.)
-
 =item BUG: Fix implicit leading parentheses
 
 Applies mostly to missing B<(> at beginning of query string, but also (to lesser
@@ -1739,6 +1797,32 @@ will become faster.)
 
 Option to enable/disable searching comments. By default comments should not be
 searched.
+
+=head2 Improve unit testing
+
+=over 4
+
+=item Colorize test result
+
+Failures should be clearly highlighted. The final result of the test suite
+should be clearly indicated ('FAIL' or 'PASS' with red or green background).
+
+=item Any passing TODO tests should result in fail!
+
+Since test suite is kinda ridiculously verbose, failing TODO tests should
+result in a very clear message failure at the end.
+
+=item List TODO comments at end of testing
+
+As TODO items are a wishlist for what to implement, they should be clearly
+visible.
+
+=item Speed up program load time?
+
+Is compilation of tests slowing B<zdb> down? If so, there is some module which
+puts selected code after C<__DATA__> block. Use that to speed things up?
+
+=back
 
 =head2 Smart case matching
 
