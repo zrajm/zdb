@@ -9,10 +9,8 @@ use warnings  qw(FATAL utf8);    # fatalize encoding glitches
 use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
-my %opt;
-
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.19';                         # https://semver.org/
+our $VERSION='0.7.20';                         # https://semver.org/
 our $VERSION_DATE='5 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -131,6 +129,7 @@ tlh:(tlha tlhup)
 # Option to enable/disable diacritics (without 'a' would match 'ä')
 QUERY_END
 
+my %opt;
 my $pager_pid;
 END {
     if ($? > 0) {
@@ -356,10 +355,6 @@ sub record {
 }
 {
     package Query;
-    #            or
-    #            |and and
-    #            ||   |
-    #my $query = [[], []];
     sub new {
         my ($class, $query_str) = @_;
         my $query = _normalize(_parse($query_str)) // [];
@@ -1520,174 +1515,178 @@ matches are presumably pretty rare anyways.)
 
 =head1 AUTHOR
 
-Copyright (C) 1998-2025 zrajm <zrajm@klingonska.org>.
+Copyright (C) 1998--2025 zrajm <zrajm@klingonska.org>.
 
 
 =head1 HISTORY
 
-[2025-11-11 00:51-06:50] & [2025-11-11 15:26-21:32, 00:04-02:20] v0.0.1 -
-Primitive initial functionality. Output a ZDB file (given a ZDB file on
-standard input), and split the file into records internally while preserving
-whitespace between records (and at the beginning & ending of file).
+B<v0.0.1> - Primitive initial functionality. Output a ZDB file (given a ZDB
+file on standard input), and split the file into records internally while
+preserving whitespace between records (and at the beginning & ending of file).
+(2025-11-11 00:51--06:50, 15:26--21:32; 2025-11-12 00:04--02:20)
 
-[2025-11-11 15:26-16:11, 19:45-21:31] & [2025-11-12 00:04-03:28, 05:02-07:12]
-[2025-11-14 01:03-06:30, 18:10-11:42] v0.1.0 - Defined internal query format,
-and internal data format. File now loads into the new format loading.
-Implemented search (using a simple hardcoded query). Added highlighting of
-search result (including overlapping matches).
+B<v0.1.0> - Defined internal query format, and internal data format. File now
+loads into the new format loading. Implemented search (using a simple hardcoded
+query). Added highlighting of search result (including overlapping matches).
+(2025-11-11 15:26--16:11, 19:45--21:31; 2025-11-12 00:04--03:28, 05:02--07:12;
+2025-11-14 01:03--06:30, 18:10--11:42)
 
-[2025-11-14 11:42-12:22] v0.1.1 - Documented internals somewhat.
+B<v0.1.1> - Documented internals somewhat. (2025-11-14 11:42--12:22)
 
-[2025-11-15 15:33-17:06] v0.2.0 - Added B<--pager> and B<--manpage> options.
-Pager defaults to whatever is specified in the $PAGER environment variable
-(defaulting to B<less>). B<--manpage> option shows simple documentation (not
-yet manpage formatted, but its *something*). Also removed the command line
-options B<--help-internals> and B<--todo> as this info is now part of the
-manpage instead.
+B<v0.2.0> - Added B<--pager> and B<--manpage> options. Pager defaults to
+whatever is specified in the $PAGER environment variable (defaulting to
+B<less>). B<--manpage> option shows simple documentation (not yet manpage
+formatted, but its *something*). Also removed the command line options
+B<--help-internals> and B<--todo> as this info is now part of the manpage
+instead. (2025-11-15 15:33--17:06)
 
-[2025-11-16 00:06-04:39], [2025-11-16 23:18-02:27], [2025-11-17 04:29-08:10] &
-[2025-11-17 14:13-17:07] v0.3.0 - Pager now defaults to B<pager> (instead of
-B<less>). Better suppression of pager (or, in the case of B<--manpage>,
-manpager) when there are errors. Extensive rewrite of docs.
+B<v0.3.0> - Pager now defaults to B<pager> (instead of B<less>). Better
+suppression of pager (or, in the case of B<--manpage>, manpager) when there are
+errors. Extensive rewrite of docs. (2025-11-16 00:06--04:39, 23:18--02:27;
+2025-11-17 04:29--08:10, 14:13--17:07)
 
-[2025-11-17, 18:53-19:23] v0.3.1 - Moved query parsing and matching into Query
-module.
+B<v0.3.1> - Moved query parsing and matching into Query module. (2025-11-17,
+18:53--19:23)
 
-[2025-11-18 19:26-19:39] v0.3.2 - Now gets QUERY from command line arguments.
-Very basic, all arguments are simply AND:ed, and each pattern is expected to
-match a whole word (with no wildcards or anything).
+B<v0.3.2> - Now gets QUERY from command line arguments. Very basic, all
+arguments are simply AND:ed, and each pattern is expected to match a whole word
+(with no wildcards or anything). (2025-11-18 19:26--19:39)
 
-[2025-11-18 19:39-21:21] v0.3.3 - Added B<--paging> option.
+B<v0.3.3> - Added B<--paging> option. (2025-11-18 19:39--21:21)
 
-[2025-11-18 21:21-21:42] v0.3.4 - Tested/verified and documented the B<$PAGER>
-and B<--pager=>I<CMD> capabilities. (Yes, Perl allows more complex commands to
-be used.)
+B<v0.3.4> - Tested/verified and documented the B<$PAGER> and B<--pager=>I<CMD>
+capabilities. (Yes, Perl allows more complex commands to be used.) (2025-11-18
+21:21--21:42)
 
-[2025-11-19 00:04-01:01] v0.4.0 - Added B<ZDBPAGER> for B<zdb>-specific pager
-defaults.
+B<v0.4.0> - Added B<ZDBPAGER> for B<zdb>-specific pager defaults. (2025-11-19
+00:04--01:01)
 
-[2025-11-19 02:28-02:41] v0.4.1 - Moved unit tests into Query module.
+B<v0.4.1> - Moved unit tests into Query module. (2025-11-19 02:28--02:41)
 
-[2025-11-19 02:41-03:20] v0.4.2 - Now use Test::More for unit tests in Query
-module.
+B<v0.4.2> - Now use Test::More for unit tests in Query module. (2025-11-19
+02:41--03:20)
 
-[2025-11-20 07:31-09:08] v0.4.3 - Updated manpage. Added description of how to
-use B<zdb> as a shebang. Made sure manpage includes all required headlines.
-Added notes on L</FILES> and L</RESTRICTIONS>.
+B<v0.4.3> - Updated manpage. Added description of how to use B<zdb> as a
+shebang. Made sure manpage includes all required headlines. Added notes on
+L</FILES> and L</RESTRICTIONS>. (2025-11-20 07:31--09:08)
 
-[2025-11-23 11:18-13:44] v0.4.4 - Updated manpage with ideas for future.
+B<v0.4.4> - Updated manpage with ideas for future. (2025-11-23 11:18--13:44)
 
-[2025-11-23 13:44-13:58] v0.5.0 - Renamed B<--manpage> option to B<--manual>
-(and added the short option B<-M>). The new option names are the same as those
-used by the B<curl> command. Unfortunately, almost no other commands seem to
-provide a flag to show their B<man> page, so it isn't very easy to find an
-intuitive option name to use. :(
+B<v0.5.0> - Renamed B<--manpage> option to B<--manual> (and added the short
+option B<-M>). The new option names are the same as those used by the B<curl>
+command. Unfortunately, almost no other commands seem to provide a flag to show
+their B<man> page, so it isn't very easy to find an intuitive option name to
+use. :( (2025-11-23 13:44--13:58)
 
-[2025-11-25 08:49-11:29] v0.5.1 - Expanded manpage. Improved chapters
-DESCRIPTION, QUERIES (subchapters 'Logic Operators', 'Field Prefixes' and
-'Quoting'). Added and clarified a buncha stuff on the 'FUTURE' wishlist.
+B<v0.5.1> - Expanded manpage. Improved chapters DESCRIPTION, QUERIES
+(subchapters 'Logic Operators', 'Field Prefixes' and 'Quoting'). Added and
+clarified a buncha stuff on the 'FUTURE' wishlist. (2025-11-25 08:49--11:29)
 
-[2025-11-25 12:31-12:36] v0.5.2 - Moved END {} block to after info variables.
+B<v0.5.2> - Moved C<< END {} >> block to after info variables. (2025-11-25
+12:31--12:36)
 
-[2025-11-25 02:14-04:57, 11:37-12:56, 17:29-18:01], [2025-11-26 15:08-15:59]
-v0.6.0 - Added B<-e>/B<--match> option and removed B<-f>/B<--file> option.
+B<v0.6.0> - Added B<-e>/B<--match> option and removed B<-f>/B<--file> option.
 B<--file> was used to specify a database input file (mentioned as being
 inspired by B<grep>'s option of the same name) but B<grep> actually uses that
 option to specify a file of B<match patterns>, not data! This update brings the
 options in line with how B<grep>, B<sed> and B<awk> (actually) works.
+(2025-11-25 02:14--04:57, 11:37--12:56, 17:29--18:01; 2025-11-26 15:08--15:59)
 
-[2025-11-26 15:59-17:37] v0.6.1 - Support for '-' argument. QUERY argument now
-mandatory (until implementing L</No QUERY = Show database status>). Also
-updated usage string to reflect this.
+B<v0.6.1> - Support for '-' argument. QUERY argument now mandatory (until
+implementing L</No QUERY = Show database status>). Also updated usage string to
+reflect this. (2025-11-26 15:59--17:37)
 
-[2025-11-26 18:46-18:59] v0.6.2 - Documentation proofreading & fixes.
+B<v0.6.2> - Documentation proofreading & fixes. (2025-11-26 18:46--18:59)
 
-[2025-11-26 18:59-19:20] v0.6.3 - Additional manpage spellfixes.
+B<v0.6.3> - Additional manpage spellfixes. (2025-11-26 18:59--19:20)
 
-[2025-11-26 19:20-19:23] v0.6.4 - Corrected B</bin/env> -> B</usr/bin/env>.
+B<v0.6.4> - Corrected B</bin/env> -> B</usr/bin/env>. (2025-11-26 19:20--19:23)
 
-[2025-11-29 00:13-00:25] v0.6.5 - Added note about hierarchical fields to
-FUTURE.
+B<v0.6.5> - Added note about hierarchical fields to FUTURE. (2025-11-29
+00:13--00:25)
 
-[2025-11-28 18:30-13:45] v0.7.0 - Added some preliminary query parsing and
-started working on tests for the same. Code is currently in a non-functional
-state, as the PARSING is approaching done, but generating the query function
-from the parse tree remains to do be done. Also, the internal representation of
-the parse tree will most likely change.
+B<v0.7.0> - Added some preliminary query parsing and started working on tests
+for the same. Code is currently in a non-functional state, as the PARSING is
+approaching done, but generating the query function from the parse tree remains
+to do be done. Also, the internal representation of the parse tree will most
+likely change. (2025-11-28 18:30--13:45)
 
-[2025-11-30 13:20-14:11, 20:20-22:12], [2025-12-01 08:16-10:40, 11:21-13:50,
-15:50-16:48, 23:03-23:34] v0.7.1 - Added tests for `Query::_parse()`, and got
-the 'bottomless' stack feature to work (meaning that unmatched ')' in the
-syntax query now works too).
+B<v0.7.1> - Added tests for `Query::_parse()`, and got the 'bottomless' stack
+feature to work (meaning that unmatched ')' in the syntax query now works too).
+(2025-11-30 13:20--14:11, 20:20--22:12; 2025-12-01 08:16--10:40, 11:21--13:50,
+15:50--16:48, 23:03--23:34)
 
-[2025-12-01 23:42-23:50] v0.7.2 - Test callback function now declared using
-`sub {}`.
+B<v0.7.2> - Test callback function now declared using `sub {}`. (2025-12-01
+23:42--23:50)
 
-[2025-12-01 23:54-23:57] v0.7.3 - Remove use of 'plain' object property when
-parsing (& testing) query. (Now use only the '_word' property which is split
-into individual chars.)
+B<v0.7.3> - Remove use of 'plain' object property when parsing (& testing)
+query. (Now use only the '_word' property which is split into individual
+chars.) (2025-12-01 23:54--23:57)
 
-[2025-12-02 08:43-08:56] v0.7.4 - Very minor cleanup.
+B<v0.7.4> - Very minor cleanup. (2025-12-02 08:43--08:56)
 
-[2025-12-02 09:15-09:52] v0.7.5 - Moved some parsing logic into Query::Stack.
+B<v0.7.5> - Moved some parsing logic into Query::Stack. (2025-12-02
+09:15--09:52)
 
-[2025-12-02 10:02-10:06] v0.7.6 - Made finite state machine shorter/more
-readable. Added a test for double parentheses.
+B<v0.7.6> - Made finite state machine shorter/more readable. Added a test for
+double parentheses. (2025-12-02 10:02--10:06)
 
-[2025-12-02 11:34-13:44] v0.7.7 - Simplify query during parsing by trimming
-empty words.
+B<v0.7.7> - Simplify query during parsing by trimming empty words. (2025-12-02
+11:34--13:44)
 
-[2025-12-02 13:51-14:20] v0.7.8 - BUGFIX: Honor quotes in query + test cases
-for that + other small fixes.
+B<v0.7.8> - BUGFIX: Honor quotes in query + test cases for that + other small
+fixes. (2025-12-02 13:51--14:20)
 
-[2025-12-02 16:05-17:25] v0.7.9 - Removed 'or' field from stack items, and
-added 'type' = 'word' for word items (now relying on 'type' = 'and', 'or',
-'nor' or 'word').
+B<v0.7.9> - Removed 'or' field from stack items, and added 'type' = 'word' for
+word items (now relying on 'type' = 'and', 'or', 'nor' or 'word'). (2025-12-02
+16:05--17:25)
 
-[2025-12-02 17:58-18:42, 21:12-22:30] v0.7.10 - Changed internal format. Search
-words are now also (just like parentheses) stored as arrayrefs, where first
-element is a metadata hashref.
+B<v0.7.10> - Changed internal format. Search words are now also (just like
+parentheses) stored as arrayrefs, where first element is a metadata hashref.
+(2025-12-02 17:58--18:42, 21:12--22:30)
 
-[2025-12-02 22:38-22:58] v0.7.11 - Renamed a B<Query::Stack> function.
-Documented the future of the query parsing.
+B<v0.7.11> - Renamed a B<Query::Stack> function. Documented the future of the
+query parsing. (2025-12-02 22:38--22:58)
 
-[2025-12-03 08:04-08:12] v0.7.12 - Removed unused query cleanup function.
+B<v0.7.12> - Removed unused query cleanup function. (2025-12-03 08:04--08:12)
 
-[2025-12-03 08:12-09:20] v0.7.13 - Now removes empty terms in QUERY during
-parsing. This continually cleans up both empty search words (which are inserted
-as part of the query parsing itself) and empty parentheses as the query is
-being parsed.
+B<v0.7.13> - Now removes empty terms in QUERY during parsing. This continually
+cleans up both empty search words (which are inserted as part of the query
+parsing itself) and empty parentheses as the query is being parsed. (2025-12-03
+08:12--09:20)
 
-[2025-12-03 09:45-10:05] v0.7.14 - Slightly different syntax for unit tests
-involving 'not' (B<->) and 'field' (B<=>) prefixes.
+B<v0.7.14> - Slightly different syntax for unit tests involving 'not' (B<->)
+and 'field' (B<=>) prefixes. (2025-12-03 09:45--10:05)
 
-[2025-12-03 10:14-11:40] v0.7.15 - Slight change in debug output. No longer
-using 'nor' for negative OR parentheses, but instead prefixing parentheses B<->
-and B<=> for negated and field matching.
+B<v0.7.15> - Slight change in debug output. No longer using 'nor' for negative
+OR parentheses, but instead prefixing parentheses B<-> and B<=> for negated and
+field matching. (2025-12-03 10:14--11:40)
 
-[2025-12-03 17:31-21:54] v0.7.16 - Now removes any parenthesis in QUERY that
-wrap a single term. Term inside is kept, and the 'not' and 'field' attributes
-of the removed parenthesis and the term are combined.
+B<v0.7.16> - Now removes any parenthesis in QUERY that wrap a single term. Term
+inside is kept, and the 'not' and 'field' attributes of the removed parenthesis
+and the term are combined. (2025-12-03 17:31--21:54)
 
-[2025-12-03 23:46-00:51] v0.7.17 - Prettier B<--test> output.
+B<v0.7.17> - Prettier B<--test> output. (2025-12-03 23:46--00:51)
 
-[2025-12-04 07:50-12:14] v0.7.18 - Added a slew of unit tests. Unit tests were
-taken from my online Swedish Sign Language dictionary, which implement a very
-similar (sloppy) query language
-(L<https://zrajm.org/teckentranskription/lexicon-tests.html>).
+B<v0.7.18> - Added a slew of unit tests. Unit tests were taken from my online
+Swedish Sign Language dictionary, which implement a very similar (sloppy) query
+language (L<https://zrajm.org/teckentranskription/lexicon-tests.html>).
+(2025-12-04 07:50--12:14)
 
-[2025-12-04 00:56-01:49, 17:24-17:51, 18:06-18:23], [2025-12-05 09:05-12:39]
-v0.7.19 - Implemented query B<_normalize()>, which moves query prefixes C<B<->>
-and C<B<=>> to the leaf nodes of the query, applying De Morgan's Law. This
-makes sure that match highlighting works, by no query term negated more than
-once. Also added the tests required to test the new function, and adapted the
-test functions for this.
+B<v0.7.19> - Implemented query B<_normalize()>, which moves query prefixes
+C<B<->> and C<B<=>> to the leaf nodes of the query, applying De Morgan's Law.
+This makes sure that match highlighting works, by no query term negated more
+than once. Also added the tests required to test the new function, and adapted
+the test functions for this. (2025-12-04 00:56--01:49, 17:24--17:51,
+18:06--18:23; 2025-12-05 09:05--12:39)
+
+B<v0.7.20> - Prettified this L</HISTORY> section. (2025-12-05 12:42--13:16)
 
 
 =head1 COPYRIGHT AND LICENSE
 
 Copyright 2025, zrajm L<zrajm@klingonska.org>. ZDB file format copyright
-1998-2025 by zrajm and Klingonska Akademien in Uppsala, Sweden.
+1998--2025 by zrajm and Klingonska Akademien (Uppsala, Sweden).
 L<https://klingonska.org>.
 
 License GPLv2: GNU General Public License version 2 or later
