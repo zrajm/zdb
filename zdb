@@ -10,7 +10,7 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.21';                         # https://semver.org/
+our $VERSION='0.7.22';                         # https://semver.org/
 our $VERSION_DATE='6 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -185,21 +185,6 @@ sub manpage {
 
 ###############################################################################
 
-sub uniq {
-    my %seen;
-    return grep { !$seen{$_}++ } @_;
-}
-
-# FIXME: Should replace all control chars with equivalent '\x' code.
-sub quotefunny {
-    local ($_) = @_;
-    local $" = '';
-    my %t = ("\0" => '\0', "\a" => '\a', "\b" => '\b', "\e" => '\e',
-             "\f" => '\f', "\n" => '\n', "\r" => '\r', "\t" => '\t');
-    s#[@{[ keys(%t) ]}]#$t{$&}#g;
-    return $_;
-}
-
 # my $record = record(<<~"END_RECORD");
 #     country	Greenland
 #     name	Anders Grönroot
@@ -362,11 +347,6 @@ sub record {
         return bless($query, $class);
     }
 
-    # FIXME: Turn parsed query into (recursive) matcher function.
-    # my $query = [[
-    #     map { match_value_regex(qr/\b$_\b/i) } split(/\s+/, $query_str)
-    # ]];
-
     sub debug {
         my ($x, $seen) = @_;
         use Carp;
@@ -422,30 +402,6 @@ sub record {
             $class eq "Query"        ? $out :
             "bless($out, '$class')";
     }
-
-    # sub finalizeTerm {
-    #     my ($state) = @_;
-    #     my ($plain, $regex, $field, $not, $wordBeg, $wordEnd)
-    #         = @$state{qw(plain regex field not wordBeg wordEnd)};
-    #     $plain //= '';
-    #     $regex //= '';
-    #     $field //= '';
-    #     $not   //= '';
-    #     my $wordRegex = sub {
-    #         my ($regex) = @_;
-    #         my $noWord = "[ 􌥠,:!?/.’()[\]&+–-]";
-    #         return ($wordBeg ? "(^|$noWord)" : '()')
-    #             . "($regex)"
-    #             . ($wordEnd ? "(?=$noWord|$)" : '');
-    #     };
-    #     return {
-    #         regex => $regex
-    #             ? qr/@{[ $field ? "^${regex}\$" : $wordRegex->($regex) ]}/ui
-    #             : '',
-    #         plain => $plain,
-    #         not   => $not,
-    #     };
-    # }
 
     sub _parse {
         my ($query_str) = @_;
@@ -566,109 +522,6 @@ sub record {
             die "Unknown subquery type: '$meta->{type}'\n";
     }
 
-    # Returns a matcher function. Matcher function takes two args ($field name &
-    # $value) and returns true/false. If called without args it returns a structure
-    # to describe itself.
-    sub match_value_regex {
-        my ($regex) = @_;
-        my ($INVERT, $UNINVERT) = ("\e[7m", "\e[27m");
-        return sub {
-            my ($field, $value) = @_ or return {
-                # structure describing ourself
-                type  => 'regex',
-                match => 'value',
-                regex => $regex,
-            };
-            #return $value =~ $regex;  # simple true/false
-            return $value =~ s#$regex#$INVERT$&$UNINVERT#g
-                ? ($field, $value) : ();
-        };
-    }
-
-    # Test all elements in $array by invoking callback (passing the element as
-    # arg). If third argument is provided and is truthy, it'll operate in AND
-    # (or all) mode, without it OR (or any) mode is used
-    my $VERBOSE_RECURSE = 0;
-    sub recurse {                       # $and: true = AND/all / false = OR/any
-        my ($func, $array, $and) = @_;
-        say('  ' . ($and ? 'AND' : 'OR')) if $VERBOSE_RECURSE;
-        my $match = $and;
-        for (@$array) {
-            $match = !$and if $func->($_) xor $and;
-        }
-        return $match;
-    }
-    sub any {
-        my ($func, $list) = @_;
-        for (@$list) { return 1 if $func->($_) }
-        return ();
-    }
-    sub all {
-        my ($func, $list) = @_;
-        for (@$list) { return () unless $func->($_) }
-        return 1;
-    }
-
-    # FIXME: Be smarter about short-circuiting (it can be done when no
-    # highlight is needed, e.g. on a negative match, or when highlight is off).
-    #
-    # SHORTCUTTING: version (will only highlight first match).
-    # sub recurse { # $and: true = AND/all / false = OR/any
-    #     my ($func, $array, $and) = @_;
-    #     say('  ' . ($and ? 'AND' : 'OR')) if $VERBOSE_RECURSE;
-    #     for (@$array) {
-    #         return !$and if $func->($_) xor $and;
-    #     }
-    #     return $and;
-    # }
-
-    sub match {
-        my ($self, $record, $lvl) = @_;
-        return _match($self->{query}, $record);
-    }
-
-    sub _match {
-        my ($query, $record, $lvl) = @_;
-        $lvl //= 0;                            # even = AND, odd = OR
-
-        # Subquery.
-        if (ref($query) eq 'ARRAY') {
-            my $match = recurse(
-                sub {
-                    my ($subquery) = @_;
-                    return _match($subquery, $record, !$lvl);
-                },
-                $query,
-                $lvl % 2,
-            );
-            return $match ? $record : '';
-        }
-
-        die "Error in query" unless ref($query) eq 'CODE';
-
-        my $match = 0;
-        for my $field (@$record) {
-            my ($name, $value) = ($field->{field}, $field->{value});
-
-            #say "----------------------------------------";
-            my ($pre, $sep, $post) = @{ $field->{space} };
-            # say "READ: << '" . quotefunny("$pre$name$sep$value$post") . "'";
-
-            my @hilited = $query->($name, $value);
-            if (@hilited) {
-                # Insert hilited values into record.
-                my ($name2, $value2) = @hilited;
-                push(@{$field->{field_hilite}}, $name2)  if $name2  ne $name;
-                push(@{$field->{value_hilite}}, $value2) if $value2 ne $value;
-
-                #($name, $value) = @hilited;
-                #print "('$name', '$value') matches " . Dumper($query->());
-                $match = 1;
-            }
-        }
-        return $match ? $record : '';
-    }
-
     # FIXME: Test some actual queries
     #        my $record = record(<<~"END_RECORD");
     #            country	Greenland
@@ -703,68 +556,6 @@ sub record {
             Test::More::subtest("TODO $msg", $coderef, @args);
             print STDERR "\e[39m";
         }
-
-        state sub f { shift () }               # return 1st arg as-is
-        # OR mode (default).
-        ok(!any(\&f, []),            "any => []");
-        ok( any(\&f, [1]),           "any => [1]");
-        ok(!any(\&f, [0, 0]),        "any => [0, 0]");
-        ok( any(\&f, [0, 1]),        "any => [0, 1]");
-        ok( any(\&f, [1, 0]),        "any => [1, 0]");
-        ok( any(\&f, [1, 1]),        "any => [1, 1]");
-        ok(!any(\&f, [0, 0, 0]),     "any => [0, 0, 0]");
-        ok( any(\&f, [0, 0, 1]),     "any => [0, 0, 1]");
-        ok( any(\&f, [0, 1, 0]),     "any => [0, 1, 0]");
-        ok( any(\&f, [0, 1, 1]),     "any => [0, 1, 1]");
-        ok( any(\&f, [1, 0, 0]),     "any => [1, 0, 0]");
-        ok( any(\&f, [1, 0, 1]),     "any => [1, 0, 1]");
-        ok( any(\&f, [1, 1, 0]),     "any => [1, 1, 0]");
-        ok( any(\&f, [1, 1, 1]),     "any => [1, 1, 1]");
-        # AND mode.
-        ok( all(\&f, []),            "all => []");
-        ok( all(\&f, [1]),           "all => [1]");
-        ok(!all(\&f, [0, 0]),        "all => [0, 0]");
-        ok(!all(\&f, [0, 1]),        "all => [0, 1]");
-        ok(!all(\&f, [1, 0]),        "all => [1, 0]");
-        ok( all(\&f, [1, 1]),        "all => [1, 1]");
-        ok(!all(\&f, [0, 0, 0]),     "all => [0, 0, 0]");
-        ok(!all(\&f, [0, 0, 1]),     "all => [0, 0, 1]");
-        ok(!all(\&f, [0, 1, 0]),     "all => [0, 1, 0]");
-        ok(!all(\&f, [0, 1, 1]),     "all => [0, 1, 1]");
-        ok(!all(\&f, [1, 0, 0]),     "all => [1, 0, 0]");
-        ok(!all(\&f, [1, 0, 1]),     "all => [1, 0, 1]");
-        ok(!all(\&f, [1, 1, 0]),     "all => [1, 1, 0]");
-        ok( all(\&f, [1, 1, 1]),     "all => [1, 1, 1]");
-        # OR mode (default).
-        ok(!recurse(\&f, []),           "recurse => []");
-        ok( recurse(\&f, [1]),          "recurse => [1]");
-        ok(!recurse(\&f, [0, 0]),       "recurse => [0, 0]");
-        ok( recurse(\&f, [0, 1]),       "recurse => [0, 1]");
-        ok( recurse(\&f, [1, 0]),       "recurse => [1, 0]");
-        ok( recurse(\&f, [1, 1]),       "recurse => [1, 1]");
-        ok(!recurse(\&f, [0, 0, 0]),    "recurse => [0, 0, 0]");
-        ok( recurse(\&f, [0, 0, 1]),    "recurse => [0, 0, 1]");
-        ok( recurse(\&f, [0, 1, 0]),    "recurse => [0, 1, 0]");
-        ok( recurse(\&f, [0, 1, 1]),    "recurse => [0, 1, 1]");
-        ok( recurse(\&f, [1, 0, 0]),    "recurse => [1, 0, 0]");
-        ok( recurse(\&f, [1, 0, 1]),    "recurse => [1, 0, 1]");
-        ok( recurse(\&f, [1, 1, 0]),    "recurse => [1, 1, 0]");
-        ok( recurse(\&f, [1, 1, 1]),    "recurse => [1, 1, 1]");
-        # AND mode.
-        ok( recurse(\&f, [], 1),        "recurse => []");
-        ok( recurse(\&f, [1], 1),       "recurse => [1]");
-        ok(!recurse(\&f, [0, 0], 1),    "recurse => [0, 0]");
-        ok(!recurse(\&f, [0, 1], 1),    "recurse => [0, 1]");
-        ok(!recurse(\&f, [1, 0], 1),    "recurse => [1, 0]");
-        ok( recurse(\&f, [1, 1], 1),    "recurse => [1, 1]");
-        ok(!recurse(\&f, [0, 0, 0], 1), "recurse => [0, 0, 0]");
-        ok(!recurse(\&f, [0, 0, 1], 1), "recurse => [0, 0, 1]");
-        ok(!recurse(\&f, [0, 1, 0], 1), "recurse => [0, 1, 0]");
-        ok(!recurse(\&f, [0, 1, 1], 1), "recurse => [0, 1, 1]");
-        ok(!recurse(\&f, [1, 0, 0], 1), "recurse => [1, 0, 0]");
-        ok(!recurse(\&f, [1, 0, 1], 1), "recurse => [1, 0, 1]");
-        ok(!recurse(\&f, [1, 1, 0], 1), "recurse => [1, 1, 0]");
-        ok( recurse(\&f, [1, 1, 1], 1), "recurse => [1, 1, 1]");
 
         state sub word {
             my ($word, %opt) = @_;
@@ -990,67 +781,6 @@ sub record {
         };
         done_testing();
     }
-}
-
-# Merges strings with ANSI background highlight. All strings must be identical
-# except for their ANSI markup. Background color, bold, dim & bold/dim reset,
-# invert & invert reset are stripped and background highlight (or invert) is
-# replaced. Any overlapping highlights will have a bright background + bold text
-# (regardless of the number of overlapping highlights). BUG: This function will
-# naïvely destroy any ANSI codes with semicolon-separated arguments (e.g.
-# `\e[58;5;<n>m`), if any of the arguments looks a code that should be
-# processed. To avoid this, only feed this function text with ANSI codes w/o
-# arguments, or codes with colon-separated arguments.
-sub merge_ansi {
-    my @str = @_ or die "Need at least one string";
-
-    # Strip ANSI from all strings. Remember position & string.
-    my $ESC = qr/\e\[([0-9;:]*)m/;
-    my %ansi;
-    for (@str) {
-        my $i = 0;                             # count removed chars
-        s{$ESC}{                               # remove & add to %ansi
-            push @{$ansi{ pos() - $i }}, split(';', $1);
-            $i += length($&);
-            '';
-        }ge;
-    }
-    # Check that strings are identical after ANSI stripping.
-    if ((@str = uniq(@str)) > 1) {
-        die("Strings must not differ after stripping ANSI codes:\n",
-            map { "  '$_'\n" } @str);
-    }
-    #                          STYLE   FOREGR.  BACKGR.
-    my $NORMAL = '22;39;49'; # unbold; normal;  normal
-    my $HILITE = '22;30;46'; # unbold; black;   teal
-    my $EXTRA  = '1;30;106'; # bold;   black;   bright teal
-
-    # Go through removed strings, in order.
-    my ($out, $col, $prev_col, $prev_pos) = ('', 0, 0, 0);
-    for my $pos (sort { $a <=> $b } keys %ansi) {
-
-        # Strip bold, dim, bold/dim reset, normal & bright background.
-        my @ansi = grep {
-            $col += 1 if /^(7|(4|10)[0-8])$/;  # background color
-            $col -= 1 if /^(27|49|109)$/;      # background reset
-            !/^(1|2|7|22|27|4\d|10\d)$/;
-        } @{$ansi{$pos}};
-
-        # Set ANSI hilite (for $col > 2 just use $EXTRA).
-        if ($col > $prev_col) {            # intensity went up
-            push(@ansi, $HILITE) if $col == 1;
-            push(@ansi, $EXTRA)  if $col >= 2;
-        } elsif ($col < $prev_col) {       # intensity went down
-            push(@ansi, $HILITE) if $col == 1;
-            push(@ansi, $NORMAL) if $col == 0;
-        }
-
-        # Insert substring & ANSI code.
-        $out .= substr($str[0], $prev_pos, $pos - $prev_pos)
-            . (@ansi ? "\e[" . join(';', @ansi) . "m" : '');
-        ($prev_pos, $prev_col) = ($pos, $col);
-    }
-    return $out . substr($str[0], $prev_pos) . ($col > 0 ? $NORMAL : '');
 }
 
 ###############################################################################
@@ -1739,6 +1469,8 @@ B<v0.7.21> - Implemented rudimentary B<Query::_compile()> function. QUERY is
 now used for actual searching of database. (2025-12-05 14:15--15:56; 2025-12-06
 02:18--03:47)
 
+B<v0.7.22> - Cleanup of unused code. (2025-12-06 04:38--04:50)
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1834,8 +1566,6 @@ comments that will be fixed in the future as well.)
 =head2 Read QUERY arguments
 
 =over 4
-
-=item Clean up unused code
 
 =item Implement match highlighting
 
