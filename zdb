@@ -10,7 +10,7 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.24';                         # https://semver.org/
+our $VERSION='0.7.25';                         # https://semver.org/
 our $VERSION_DATE='7 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -340,9 +340,17 @@ sub record {
 }
 {
     package Query;
+    my %lang = (
+        simple => {
+            word => \&_word_matcher,
+            and  =>  \&_and_matcher,
+            or   =>   \&_or_matcher,
+        },
+    );
+
     sub new {
-        my ($class, $query_str) = @_;
-        my $query = _compile(_normalize(_parse($query_str)))
+        my ($class, $lang, $query_str) = @_;
+        my $query = _compile($lang{$lang}, _normalize(_parse($query_str)))
             or die "Failed to parse query";
         return bless($query, $class);
     }
@@ -472,7 +480,7 @@ sub record {
     # FIXME: Return pairs of matching start/end positions or undef.
     # FIXME: For repeated matches, start searching at BEGINNING of previous match
     # position (+ 1) so as to find overlapping search terms.
-    sub _regex_matcher {
+    sub _word_matcher {
         my ($meta, @str) = @_;
         my $regex = $meta->{field}
             ? qr/\A${\join('', @str)}\Z/iu
@@ -515,12 +523,12 @@ sub record {
     # value match. The query function returns either an array of highlight
     # positions (if were matches found), or undef (if no matches were found).
     sub _compile {
-        my ($term) = @_;
+        my ($lang, $term) = @_;
         my ($meta, @data) = @$term;
         return
-            $meta->{type} eq 'word' ? _regex_matcher($meta, @data) :
-            $meta->{type} eq 'and'  ?   _and_matcher($meta, map { _compile($_) } @data) :
-            $meta->{type} eq 'or'   ?    _or_matcher($meta, map { _compile($_) } @data) :
+            $meta->{type} eq 'word' ? $lang->{word}($meta, @data) :
+            $meta->{type} eq 'and'  ? $lang->{and }($meta, map { _compile($lang, $_) } @data) :
+            $meta->{type} eq 'or'   ? $lang->{or  }($meta, map { _compile($lang, $_) } @data) :
             die "Unknown subquery type: '$meta->{type}'\n";
     }
 
@@ -886,7 +894,7 @@ $pager_pid = open(STDOUT, '|-', $opt{pager})   # send all STDOUT through pager
 # If there are multiple queries, the were gotten by -e and should be OR:ed.
 # FIXME: Parse each query separately (to resolve unfinished parens etc) then join.
 # (Make Query() accept multiple args, and OR them together.)
-my $query = new Query(join(',', @query));
+my $query = new Query(simple => join(',', @query));
 my $zdb = new ZDB($opt{file});
 while (my ($prespace, @field) = $zdb->read_record()) {
 
@@ -1473,6 +1481,12 @@ B<v0.7.23> - Minor change in argument parsing. (2025-12-07 20:44--21:01)
 
 B<v0.7.24> - QUERY prefixes C<B<->> and C<B<=>> now work in search. (2025-12-07
 21:01--22:19)
+
+B<v0.7.25> - Added query compilation 'lang' argument for specifying which
+functions to use for AND/OR and string matching in the finalized query. The
+purpose of these is to be able to provide alternate functions, e.g. for
+producing highlighted output, for dumping the query in cleaned up form.
+(2025-12-07 22:19--22:48)
 
 
 =head1 COPYRIGHT AND LICENSE
