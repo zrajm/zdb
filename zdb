@@ -10,7 +10,7 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.23';                         # https://semver.org/
+our $VERSION='0.7.24';                         # https://semver.org/
 our $VERSION_DATE='7 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -473,20 +473,22 @@ sub record {
     # FIXME: For repeated matches, start searching at BEGINNING of previous match
     # position (+ 1) so as to find overlapping search terms.
     sub _regex_matcher {
-        my (@str) = @_;
-        my $regex = qr/${\join('', @str)}/iu;
+        my ($meta, @str) = @_;
+        my $regex = $meta->{field}
+            ? qr/\A${\join('', @str)}\Z/iu
+            : qr/\b${\join('', @str)}\b/iu;
         return sub {
             # FIXME: Only returns true/false now. Fix!
             for (@_) {
-                return 1 if m/$regex/;
+                return !$meta->{not} if m/$regex/;
             }
-            return '';
+            return $meta->{not};
         };
     }
 
     # FIXME: Merge output from matcher functions & return that.
     sub _and_matcher {
-        my (@func) = @_;
+        my ($meta, @func) = @_;
         return sub {
             for (@func) {
                 return '' unless $_->(@_);
@@ -498,7 +500,7 @@ sub record {
     # FIXME: Merge output from matcher functions & return that.
     # FIXME: Match everything, not just first match.
     sub _or_matcher {
-        my (@func) = @_;
+        my ($meta, @func) = @_;
         return sub {
             for (@func) {
                 return 1 if $_->(@_);
@@ -516,9 +518,9 @@ sub record {
         my ($term) = @_;
         my ($meta, @data) = @$term;
         return
-            $meta->{type} eq 'word' ? _regex_matcher(@data) :
-            $meta->{type} eq 'and'  ?   _and_matcher(map { _compile($_) } @data) :
-            $meta->{type} eq 'or'   ?    _or_matcher(map { _compile($_) } @data) :
+            $meta->{type} eq 'word' ? _regex_matcher($meta, @data) :
+            $meta->{type} eq 'and'  ?   _and_matcher($meta, map { _compile($_) } @data) :
+            $meta->{type} eq 'or'   ?    _or_matcher($meta, map { _compile($_) } @data) :
             die "Unknown subquery type: '$meta->{type}'\n";
     }
 
@@ -888,11 +890,7 @@ my $query = new Query(join(',', @query));
 my $zdb = new ZDB($opt{file});
 while (my ($prespace, @field) = $zdb->read_record()) {
 
-    my @matching = map {
-        $query->($_->{field}, $_->{value}) // []
-    } @field;
-
-    my $matches = scalar(grep { $_ } @matching);
+    my $matches = $query->(map { $_->{field}, $_->{value} } @field);
 
     if ($matches) {
         print $prespace;
@@ -1471,7 +1469,10 @@ now used for actual searching of database. (2025-12-05 14:15--15:56; 2025-12-06
 
 B<v0.7.22> - Cleanup of unused code. (2025-12-06 04:38--04:50)
 
-B<v0.7.23> - Minor change in argument parsing. (2025-12-07 20:44-21:01)
+B<v0.7.23> - Minor change in argument parsing. (2025-12-07 20:44--21:01)
+
+B<v0.7.24> - QUERY prefixes C<B<->> and C<B<=>> now work in search. (2025-12-07
+21:01--22:19)
 
 
 =head1 COPYRIGHT AND LICENSE
