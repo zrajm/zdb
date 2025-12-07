@@ -10,7 +10,7 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.27';                         # https://semver.org/
+our $VERSION='0.7.28';                         # https://semver.org/
 our $VERSION_DATE='7 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -524,12 +524,11 @@ sub record {
     # positions (if were matches found), or undef (if no matches were found).
     sub _compile {
         my ($lang, $term) = @_;
+        return $term unless ref($term);
         my ($meta, @data) = @$term;
-        return
-            $meta->{type} eq 'atom' ? $lang->{atom}($meta, @data) :
-            $meta->{type} eq 'and'  ? $lang->{and }($meta, map { _compile($lang, $_) } @data) :
-            $meta->{type} eq 'or'   ? $lang->{or  }($meta, map { _compile($lang, $_) } @data) :
-            die "Unknown subquery type: '$meta->{type}'\n";
+        my $type = $meta->{type};
+        die "Unknown subquery type: '$type'\n" unless exists $lang->{$type};
+        return $lang->{$type}($meta, map { _compile($lang, $_) } @data);
     }
 
     # FIXME: Test some actual queries
@@ -1491,6 +1490,8 @@ producing highlighted output, for dumping the query in cleaned up form.
 B<v0.7.26> - Renamed query type C<word> to C<atom>. (2025-12-07 22:48--23:06)
 
 B<v0.7.27> - Minor docs update on internal structure. (2025-12-07 23:06--23:21)
+
+B<v0.7.28> - Simplified B<Query::_compile()>. (2025-12-07 23:23--23:31)
 
 
 =head1 COPYRIGHT AND LICENSE
