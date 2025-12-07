@@ -10,7 +10,7 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.25';                         # https://semver.org/
+our $VERSION='0.7.26';                         # https://semver.org/
 our $VERSION_DATE='7 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -271,14 +271,14 @@ sub record {
     my %paren = ( # define query parentheses
         and  => sub { [{ type => 'and',  field => 0, not => 0 }] },
         or   => sub { [{ type => 'or',   field => 0, not => 0 }] },
-        word => sub { [{ type => 'word', field => 0, not => 0, quote => '' }] },
+        atom => sub { [{ type => 'atom', field => 0, not => 0, quote => '' }] },
     );
     sub new {
         my ($class) = @_;
         return bless([[]], $class);
     }
     sub peek { return shift()->[-1]         }  # get last stack item
-    sub last { return shift()->peek()->[-1] }  # last word in last stack item
+    sub last { return shift()->peek()->[-1] }  # last atom in last stack item
     # Set metadata options for last stack entry.
     sub set {
         my ($self, %opt) = @_;
@@ -286,7 +286,7 @@ sub record {
         %{$peek->[0]} = (%{$peek->[0]}, %opt);
         return $self;
     }
-    # Strip any trailing empty word/parenthesis in last stack item.
+    # Strip any trailing empty atom/parenthesis in last stack item.
     sub trim {
         my ($self) = @_;
         my $last = $self->last();
@@ -303,7 +303,7 @@ sub record {
             $_ = $paren{$_}() if $paren{$_};   # expand 'and', 'or' etc.
             push(@{$self->[-1]}, $_);          # add to query
             push(@$self, $_)                   # push parenthesis to stack
-                if $_->[0]{type} ne 'word';
+                if $_->[0]{type} ne 'atom';
         }
         return $self;
     }
@@ -342,7 +342,7 @@ sub record {
     package Query;
     my %lang = (
         simple => {
-            word => \&_word_matcher,
+            atom => \&_atom_matcher,
             and  =>  \&_and_matcher,
             or   =>   \&_or_matcher,
         },
@@ -374,11 +374,11 @@ sub record {
         my $out =
             # Array where 1st element is with hash with property 'type'.
             /^ARRAY$/ && ref($x->[0]) eq 'HASH' && exists $x->[0]{type} ? (
-                $x->[0]{type} eq 'word' ? ( # type is 'word'
+                $x->[0]{type} eq 'atom' ? ( # type is 'atom'
                     ($x->[0]{not}   ? '-' : '') .
                     ($x->[0]{field} ? '=' : '') .
                     (@$x > 1 ? "'@{[ join('', @$x[1..$#$x]) ]}'" : '∅')
-                ) : (                       # type is non-'word'
+                ) : (                       # type is non-'atom'
                     ($x->[0]{not}   ? '-' : '') .
                     ($x->[0]{field} ? '=' : '') .
                     "$x->[0]{type}(" . join(', ', map debug($_, $seen), @$x[1..$#$x]) . ')'
@@ -413,25 +413,25 @@ sub record {
 
     sub _parse {
         my ($query_str) = @_;
-        my $stack = new Query::Stack()->push('or', 'and', 'word');
+        my $stack = new Query::Stack()->push('or', 'and', 'atom');
         my %machine = (
             '(' => sub {
                 my ($last) = @_;
                 $stack->push('or')->set(
                     not   => $last->[0]{not},
                     field => $last->[0]{field},
-                )->push('and', 'word');
+                )->push('and', 'atom');
             },
-            ')' => sub { $stack->pop()->pop()->push('word') },
-            ',' => sub { $stack->pop()->push('and', 'word') },
-            ' ' => sub { $stack->push('word') },
+            ')' => sub { $stack->pop()->pop()->push('atom') },
+            ',' => sub { $stack->pop()->push('and', 'atom') },
+            ' ' => sub { $stack->push('atom') },
             #':' => sub { my ($s) = @_ },                                  # FIXME
             '"' => sub { my ($last, $chr) = @_; $last->[0]{quote} = $chr },
             "'" => sub { my ($last, $chr) = @_; $last->[0]{quote} = $chr },
             CHR => sub {
                 my ($last, $chr) = @_;
                 return $last->[0]{quote} = '' if $chr eq $last->[0]{quote};
-                # At the start of word, and if not quoted.
+                # At the start of atom, and if not quoted.
                 if (!$last->[0]{quote} and @$last == 1) {
                     # Flip 'not' or 'field' if '-' or '=' is seen.
                     return $last->[0]{not}   = !$last->[0]{not}   if $chr eq '-';
@@ -459,12 +459,12 @@ sub record {
     # out into the leaf nodes, this converts query to Negation Normal Form.
     sub _normalize {
         my ($term, $not, $field) = @_;
-        return $term unless ref $term;         # not parenthesis/word
+        return $term unless ref $term;         # not parenthesis/atom
         state %flip = (and => 'or', or => 'and');
         my ($meta, @data) = @$term;
         $not   = ($not   // 0) ^ $meta->{not};
         $field = ($field // 0) ^ $meta->{field};
-        return [$meta->{type} ne 'word' ? {
+        return [$meta->{type} ne 'atom' ? {
             %$meta,
             type  => ($not ? $flip{$meta->{type}} : $meta->{type}),
             not   => 0,
@@ -480,7 +480,7 @@ sub record {
     # FIXME: Return pairs of matching start/end positions or undef.
     # FIXME: For repeated matches, start searching at BEGINNING of previous match
     # position (+ 1) so as to find overlapping search terms.
-    sub _word_matcher {
+    sub _atom_matcher {
         my ($meta, @str) = @_;
         my $regex = $meta->{field}
             ? qr/\A${\join('', @str)}\Z/iu
@@ -526,7 +526,7 @@ sub record {
         my ($lang, $term) = @_;
         my ($meta, @data) = @$term;
         return
-            $meta->{type} eq 'word' ? $lang->{word}($meta, @data) :
+            $meta->{type} eq 'atom' ? $lang->{atom}($meta, @data) :
             $meta->{type} eq 'and'  ? $lang->{and }($meta, map { _compile($lang, $_) } @data) :
             $meta->{type} eq 'or'   ? $lang->{or  }($meta, map { _compile($lang, $_) } @data) :
             die "Unknown subquery type: '$meta->{type}'\n";
@@ -567,11 +567,11 @@ sub record {
             print STDERR "\e[39m";
         }
 
-        state sub word {
-            my ($word, %opt) = @_;
+        state sub atom {
+            my ($atom, %opt) = @_;
             return [
-                { type => 'word', field => 0, not => 0, quote => '', %opt },
-                ($word // '') =~ /\X/gu,
+                { type => 'atom', field => 0, not => 0, quote => '', %opt },
+                ($atom // '') =~ /\X/gu,
             ];
         }
         state sub or  { [{ type => 'or',  field => 0, not => 0 }, @_] }
@@ -581,213 +581,213 @@ sub record {
 
         subtest 'QUERY NORMALIZATION (-> NEGATION NORMAL FORM)' => sub {
             subtest "Atoms (=don't modify)" => sub {
-                is_deeply(_normalize(word()), word(), '«x»');
-                is_deeply(_normalize(neg(word())), neg(word()), '«-x»');
-                is_deeply(_normalize(field(word())), field(word()), '«=x»');
-                is_deeply(_normalize(neg(field(word()))), neg(field(word())), '«-=x»');
+                is_deeply(_normalize(atom()), atom(), '«x»');
+                is_deeply(_normalize(neg(atom())), neg(atom()), '«-x»');
+                is_deeply(_normalize(field(atom())), field(atom()), '«=x»');
+                is_deeply(_normalize(neg(field(atom()))), neg(field(atom())), '«-=x»');
             };
             subtest "Atoms + 'not' arg (=set 'not' attribute)" => sub {
-                is_deeply(_normalize(word(), 1), neg(word()), '«x» -> «-x»');
-                is_deeply(_normalize(neg(word()), 1), word(), '«-x» -> «x»');
-                is_deeply(_normalize(field(word()), 1), neg(field(word())), '«=x» -> «-=x»');
-                is_deeply(_normalize(neg(field(word())), 1), field(word()), '«-=x» -> «=x»');
+                is_deeply(_normalize(atom(), 1), neg(atom()), '«x» -> «-x»');
+                is_deeply(_normalize(neg(atom()), 1), atom(), '«-x» -> «x»');
+                is_deeply(_normalize(field(atom()), 1), neg(field(atom())), '«=x» -> «-=x»');
+                is_deeply(_normalize(neg(field(atom())), 1), field(atom()), '«-=x» -> «=x»');
             };
             subtest "Atoms + 'field' arg (=set 'field' attribute)" => sub {
-                is_deeply(_normalize(word(), 0, 1), field(word()), '«x» -> «=x»');
-                is_deeply(_normalize(neg(word()), 0, 1), neg(field(word())), '«-x» -> «-=x»');
-                is_deeply(_normalize(field(word()), 0, 1), word(), '«=x» -> «x»');
-                is_deeply(_normalize(neg(field(word())), 0, 1), neg(word()), '«-=x» -> «-x»');
+                is_deeply(_normalize(atom(), 0, 1), field(atom()), '«x» -> «=x»');
+                is_deeply(_normalize(neg(atom()), 0, 1), neg(field(atom())), '«-x» -> «-=x»');
+                is_deeply(_normalize(field(atom()), 0, 1), atom(), '«=x» -> «x»');
+                is_deeply(_normalize(neg(field(atom())), 0, 1), neg(atom()), '«-=x» -> «-x»');
             };
             subtest "Atoms + both 'not' and 'field' arg (=set both attributes)" => sub {
-                is_deeply(_normalize(word(), 1, 1), neg(field(word())), '«x» -> «-=x»');
-                is_deeply(_normalize(neg(word()), 1, 1), field(word()), '«-x» -> «=x»');
-                is_deeply(_normalize(field(word()), 1, 1), neg(word()), '«=x» -> «-x»');
-                is_deeply(_normalize(neg(field(word())), 1, 1), word(), '«-=x» -> «x»');
+                is_deeply(_normalize(atom(), 1, 1), neg(field(atom())), '«x» -> «-=x»');
+                is_deeply(_normalize(neg(atom()), 1, 1), field(atom()), '«-x» -> «=x»');
+                is_deeply(_normalize(field(atom()), 1, 1), neg(atom()), '«=x» -> «-x»');
+                is_deeply(_normalize(neg(field(atom())), 1, 1), atom(), '«-=x» -> «x»');
             };
             subtest "Simple parentheses (De Morgan's Law + 'field' attribute)" => sub {
-                is_deeply(_normalize(      and(word('a'),    neg(word('b')) )), and(      word('a'),    neg(word('b'))), '« ( a -b)» -> «( a -b)»');
-                is_deeply(_normalize(  neg(and(word('a'),    neg(word('b'))))),  or(  neg(word('a')),       word('b') ), '«-( a -b)» -> «(-a, b)»');
-                is_deeply(_normalize(       or(word('a'),    neg(word('b')) )),  or(      word('a'),    neg(word('b'))), '« ( a,-b)» -> «( a,-b)»');
-                is_deeply(_normalize(  neg( or(word('a'),    neg(word('b'))))), and(  neg(word('a')),       word('b') ), '«-( a,-b)» -> «(-a  b)»');
-                is_deeply(_normalize(      and(word('a'),  field(word('b')) )), and(      word('a'),  field(word('b'))), '« ( a =b)» -> «( a =b)»');
-                is_deeply(_normalize(field(and(word('a'),  field(word('b'))))), and(field(word('a')),       word('b') ), '«=( a =b)» -> «(=a  b)»');
-                is_deeply(_normalize(       or(word('a'),  field(word('b')) )),  or(      word('a'),  field(word('b'))), '« ( a,=b)» -> «( a,=b)»');
-                is_deeply(_normalize(field( or(word('a'),  field(word('b'))))),  or(field(word('a')),       word('b') ), '«=( a,=b)» -> «(=a, b)»');
+                is_deeply(_normalize(      and(atom('a'),    neg(atom('b')) )), and(      atom('a'),    neg(atom('b'))), '« ( a -b)» -> «( a -b)»');
+                is_deeply(_normalize(  neg(and(atom('a'),    neg(atom('b'))))),  or(  neg(atom('a')),       atom('b') ), '«-( a -b)» -> «(-a, b)»');
+                is_deeply(_normalize(       or(atom('a'),    neg(atom('b')) )),  or(      atom('a'),    neg(atom('b'))), '« ( a,-b)» -> «( a,-b)»');
+                is_deeply(_normalize(  neg( or(atom('a'),    neg(atom('b'))))), and(  neg(atom('a')),       atom('b') ), '«-( a,-b)» -> «(-a  b)»');
+                is_deeply(_normalize(      and(atom('a'),  field(atom('b')) )), and(      atom('a'),  field(atom('b'))), '« ( a =b)» -> «( a =b)»');
+                is_deeply(_normalize(field(and(atom('a'),  field(atom('b'))))), and(field(atom('a')),       atom('b') ), '«=( a =b)» -> «(=a  b)»');
+                is_deeply(_normalize(       or(atom('a'),  field(atom('b')) )),  or(      atom('a'),  field(atom('b'))), '« ( a,=b)» -> «( a,=b)»');
+                is_deeply(_normalize(field( or(atom('a'),  field(atom('b'))))),  or(field(atom('a')),       atom('b') ), '«=( a,=b)» -> «(=a, b)»');
             };
         };
         subtest 'QUERY BASICS' => sub {
             query_is(''      => or());
-            query_is('a'     => word('a'));
-            query_is('ab'    => word('ab'));
-            query_is('-ab'   => neg(word('ab')), 'negated');
-            query_is('--ab'  => word('ab'), 'double negation = none');
-            query_is('---ab' => neg(word('ab')), 'negated');
-            query_is('=ab'   => field(word('ab')), 'field search');
-            query_is('==ab'  => word('ab'), 'double field search = none');
-            query_is('===ab' => field(word('ab')), 'field search');
-            query_is('a b'   => and(word('a'), word('b')), 'and');
-            query_is('a,b'   => or(word('a'), word('b')), 'or');
-            query_is('a b,c' => or(and(word('a'), word('b')), word('c')), 'priority');
-            query_is('a,b c' => or(word('a'), and(word('b'), word('c'))), 'priority');
-            query_is('a -b,c' => or(and(word('a'), neg word('b')), word('c')), 'priority');
-            query_is('a,-b c' => or(word('a'), and(neg(word('b')), word('c'))), 'priority');
+            query_is('a'     => atom('a'));
+            query_is('ab'    => atom('ab'));
+            query_is('-ab'   => neg(atom('ab')), 'negated');
+            query_is('--ab'  => atom('ab'), 'double negation = none');
+            query_is('---ab' => neg(atom('ab')), 'negated');
+            query_is('=ab'   => field(atom('ab')), 'field search');
+            query_is('==ab'  => atom('ab'), 'double field search = none');
+            query_is('===ab' => field(atom('ab')), 'field search');
+            query_is('a b'   => and(atom('a'), atom('b')), 'and');
+            query_is('a,b'   => or(atom('a'), atom('b')), 'or');
+            query_is('a b,c' => or(and(atom('a'), atom('b')), atom('c')), 'priority');
+            query_is('a,b c' => or(atom('a'), and(atom('b'), atom('c'))), 'priority');
+            query_is('a -b,c' => or(and(atom('a'), neg atom('b')), atom('c')), 'priority');
+            query_is('a,-b c' => or(atom('a'), and(neg(atom('b')), atom('c'))), 'priority');
         };
         subtest 'PARENTHESIS IN QUERY' => sub {
-            query_is('(a)'     => word('a'));
-            query_is('(a)b'    => and(word('a'), word('b')));
-            query_is('(a b)'   => and(word('a'), word('b')));
-            query_is('(a,b)'   => or(word('a'), word('b')));
-            query_is('((a,b))' => or(word('a'), word('b')));
+            query_is('(a)'     => atom('a'));
+            query_is('(a)b'    => and(atom('a'), atom('b')));
+            query_is('(a b)'   => and(atom('a'), atom('b')));
+            query_is('(a,b)'   => or(atom('a'), atom('b')));
+            query_is('((a,b))' => or(atom('a'), atom('b')));
         };
         subtest 'UNBALANCED PARENTHESES' => sub {
             query_is( ') '     => or());
             query_is( ')'      => or());
-            query_is( ') b'    => word('b'));
-            query_is('a) b'    => and(word('a'), word('b')));
-            query_is('a)'      => word('a'));
-            query_is('a))'     => word('a'));
-            query_is('a)b'     => and(word('a'), word('b')));
-            query_is('a)b)c'   => and(word('a'), word('b'), word('c')));
-            query_is('a)b)c)'  => and(word('a'), word('b'), word('c')));
-            query_is( ')b'     => word('b'));
-            query_is( '),b'    => word('b'));
-            query_is('a),'     => word('a'));
-            query_is('a),b'    => or(word('a'), word('b')));
+            query_is( ') b'    => atom('b'));
+            query_is('a) b'    => and(atom('a'), atom('b')));
+            query_is('a)'      => atom('a'));
+            query_is('a))'     => atom('a'));
+            query_is('a)b'     => and(atom('a'), atom('b')));
+            query_is('a)b)c'   => and(atom('a'), atom('b'), atom('c')));
+            query_is('a)b)c)'  => and(atom('a'), atom('b'), atom('c')));
+            query_is( ')b'     => atom('b'));
+            query_is( '),b'    => atom('b'));
+            query_is('a),'     => atom('a'));
+            query_is('a),b'    => or(atom('a'), atom('b')));
 
-            query_is( '(b'     => word('b'));
-            query_is('a(b'     => and(word('a'), word('b')));
-            query_is('((c'     => word('c'));
-            query_is('a(b(c'   => and(word('a'), and(word('b'), word('c'))));
-            query_is('a(b(c,'  => and(word('a'), and(word('b'), word('c'))));
-            query_is('a(b,(c'  => and(word('a'), or(word('b'), word('c'))));
+            query_is( '(b'     => atom('b'));
+            query_is('a(b'     => and(atom('a'), atom('b')));
+            query_is('((c'     => atom('c'));
+            query_is('a(b(c'   => and(atom('a'), and(atom('b'), atom('c'))));
+            query_is('a(b(c,'  => and(atom('a'), and(atom('b'), atom('c'))));
+            query_is('a(b,(c'  => and(atom('a'), or(atom('b'), atom('c'))));
         };
         subtest 'QUOTED STRINGS' => sub {
-            query_is('"()"'  => word('()'));
-            query_is('-"a"'  => neg(word('a')));
-            query_is('"-a"'  => word('-a'));
-            query_is('-"-a"' => neg(word('-a')));
+            query_is('"()"'  => atom('()'));
+            query_is('-"a"'  => neg(atom('a')));
+            query_is('"-a"'  => atom('-a'));
+            query_is('-"-a"' => neg(atom('-a')));
         };
         subtest 'NEGATION PROPAGATION' => sub {
-            query_is('-a'      => neg(word('a')));
-            query_is('--a'     => word('a'), 'means «a»');
-            query_is('-(a)'    => neg(word('a')), 'means «-a»');
-            query_is('-(-a)'   => word('a'), 'means «a»');
-            query_is('-(a -b)' => neg(and(word('a'), neg word('b'))), 'means «(-a,b)» -- FIXME De Morgan');
-            query_is('-(a,-b)' => neg(or(word('a'), neg(word('b')))), 'means «(-a b)» -- FIXME De Morgan');
+            query_is('-a'      => neg(atom('a')));
+            query_is('--a'     => atom('a'), 'means «a»');
+            query_is('-(a)'    => neg(atom('a')), 'means «-a»');
+            query_is('-(-a)'   => atom('a'), 'means «a»');
+            query_is('-(a -b)' => neg(and(atom('a'), neg atom('b'))), 'means «(-a,b)» -- FIXME De Morgan');
+            query_is('-(a,-b)' => neg(or(atom('a'), neg(atom('b')))), 'means «(-a b)» -- FIXME De Morgan');
             TODO "Push 'not' to leaf nodes" => sub {
-                query_is('-(a -b)' => or(neg(word('a')), word('b')), 'means «(-a,b)»');
-                query_is('-(a,-b)' => or(neg(word('a')), word('b')), 'means «(-a b)»');
+                query_is('-(a -b)' => or(neg(atom('a')), atom('b')), 'means «(-a,b)»');
+                query_is('-(a,-b)' => or(neg(atom('a')), atom('b')), 'means «(-a b)»');
             };
         };
         subtest 'FIELD PROPAGATION' => sub {
-            query_is('=(a)'    => field(word('a')), 'means «=a»');
-            query_is('=(=a)'   => word('a'), 'means «a»');
-            query_is('=(a =b)' => field(and(word('a'), field word('b'))), 'means «=a b» FIXME');
-            query_is('=(a,=b)' => field(or(word('a'), field(word('b')))), 'means «=a,b» FIXME');
+            query_is('=(a)'    => field(atom('a')), 'means «=a»');
+            query_is('=(=a)'   => atom('a'), 'means «a»');
+            query_is('=(a =b)' => field(and(atom('a'), field atom('b'))), 'means «=a b» FIXME');
+            query_is('=(a,=b)' => field(or(atom('a'), field(atom('b')))), 'means «=a,b» FIXME');
             TODO "Push 'field' to leaf nodes" => sub {
-                query_is('=(a =b)' => and(field(word('a')), word('b')), 'means «=a b»');
-                query_is('=(a,=b)' => or(field(word('a')), word('b')), 'means «=a,b»');
+                query_is('=(a =b)' => and(field(atom('a')), atom('b')), 'means «=a b»');
+                query_is('=(a,=b)' => or(field(atom('a')), atom('b')), 'means «=a,b»');
             };
         };
 
         diag("SLOPPY QUERY TESTS\n",
              '(from https://zrajm.org/teckentranskription/lexicon-tests.html)');
         subtest '1. Simplest tests' => sub {
-            query_is('a'      => word('a'),                      '1.1');
-            query_is('-a'     => neg(word('a')),                 '1.2');
-            query_is('a b'    => and(word('a'), word('b')),      '1.3');
-            query_is('(a b)'  => and(word('a'), word('b')),      '1.4');
-            query_is('-(a b)' => neg(and(word('a'), word('b'))), '1.5');
+            query_is('a'      => atom('a'),                      '1.1');
+            query_is('-a'     => neg(atom('a')),                 '1.2');
+            query_is('a b'    => and(atom('a'), atom('b')),      '1.3');
+            query_is('(a b)'  => and(atom('a'), atom('b')),      '1.4');
+            query_is('-(a b)' => neg(and(atom('a'), atom('b'))), '1.5');
         };
         subtest '2. Missing start parenthesis' => sub {
-            query_is('a)' => word('a'), '2.1');
-            query_is('a b)' => and(word('a'), word('b')), '2.2');
-            query_is('a b) c' => and(word('a'), word('b'), word('c')), '2.3');
+            query_is('a)' => atom('a'), '2.1');
+            query_is('a b)' => and(atom('a'), atom('b')), '2.2');
+            query_is('a b) c' => and(atom('a'), atom('b'), atom('c')), '2.3');
             TODO "EXPECTED (should work, but doesn't)" => sub {
-                query_is('a, b) c'  => and(or(word('a'), word('b')), word('c')), '2.4');
-                query_is('a b), c' => or(and(word('a'), word('b')), word('c')), '2.5');
-                query_is('a, b), c' => or(or(word('a'), word('b')), word('c')), '2.6');
-                query_is('a, b), c d' => or(or(word('a'), word('b')), and(word('c'), word('d'))), '2.7');
-                query_is('a, b) (c, d)' => and(or(word('a'), word('b')), or(word('c'), word('d'))), '2.8');
+                query_is('a, b) c'  => and(or(atom('a'), atom('b')), atom('c')), '2.4');
+                query_is('a b), c' => or(and(atom('a'), atom('b')), atom('c')), '2.5');
+                query_is('a, b), c' => or(or(atom('a'), atom('b')), atom('c')), '2.6');
+                query_is('a, b), c d' => or(or(atom('a'), atom('b')), and(atom('c'), atom('d'))), '2.7');
+                query_is('a, b) (c, d)' => and(or(atom('a'), atom('b')), or(atom('c'), atom('d'))), '2.8');
             };
-            query_is('(a, b) c' => and(or(word('a'), word('b')), word('c')), '2.4b INCORRECT -- replace by above TODO');
-            query_is('(a b), c' => or(and(word('a'), word('b')), word('c')), '2.5b INCORRECT -- replace by above TODO');
-            query_is('(a, b), c' => or(or(word('a'), word('b')), word('c')), '2.6b INCORRECT -- replace by above TODO');
-            query_is('(a, b), c d' => or(or(word('a'), word('b')), and(word('c'), word('d'))), '2.7b INCORRECT -- replace by above TODO');
-            query_is('(a, b) (c, d)' => and(or(word('a'), word('b')), or(word('c'), word('d'))), '2.8b INCORRECT -- replace by above TODO');
+            query_is('(a, b) c' => and(or(atom('a'), atom('b')), atom('c')), '2.4b INCORRECT -- replace by above TODO');
+            query_is('(a b), c' => or(and(atom('a'), atom('b')), atom('c')), '2.5b INCORRECT -- replace by above TODO');
+            query_is('(a, b), c' => or(or(atom('a'), atom('b')), atom('c')), '2.6b INCORRECT -- replace by above TODO');
+            query_is('(a, b), c d' => or(or(atom('a'), atom('b')), and(atom('c'), atom('d'))), '2.7b INCORRECT -- replace by above TODO');
+            query_is('(a, b) (c, d)' => and(or(atom('a'), atom('b')), or(atom('c'), atom('d'))), '2.8b INCORRECT -- replace by above TODO');
         };
         subtest '3. Missing end parenthesis' => sub {
-            query_is('(a' => word('a'), '3.1');
-            query_is('(a b)' => and(word('a'), word('b')), '3.2');
+            query_is('(a' => atom('a'), '3.1');
+            query_is('(a b)' => and(atom('a'), atom('b')), '3.2');
             TODO "EXPECTED (should work, but doesn't)" => sub {
-                query_is('a (b c' => and(word('a'), word('b'), word('c')), '3.3');
+                query_is('a (b c' => and(atom('a'), atom('b'), atom('c')), '3.3');
             };
-            query_is('a (b c' => and(word('a'), and(word('b'), word('c'))), '3.3b INCORRECT -- replace by above TODO');
-            query_is('a, (b c' => or(word('a'), and(word('b'), word('c'))), '3.4');
-            query_is('a (b, c' => and(word('a'), or(word('b'), word('c'))), '3.5');
+            query_is('a (b c' => and(atom('a'), and(atom('b'), atom('c'))), '3.3b INCORRECT -- replace by above TODO');
+            query_is('a, (b c' => or(atom('a'), and(atom('b'), atom('c'))), '3.4');
+            query_is('a (b, c' => and(atom('a'), or(atom('b'), atom('c'))), '3.5');
             TODO "EXPECTED (should work, but doesn't)" => sub {
-                query_is('a, (b, c' => or(word('a'), word('b'), word('c')), '3.6');
-                query_is('a b, (c, d' => or(and(word('a'), word('b')), word('c'), word('d'), '3.7'));
+                query_is('a, (b, c' => or(atom('a'), atom('b'), atom('c')), '3.6');
+                query_is('a b, (c, d' => or(and(atom('a'), atom('b')), atom('c'), atom('d'), '3.7'));
             };
-            query_is('a, (b, c' => or(word('a'), or(word('b'), word('c'))), '3.6b INCORRECT -- replace by above TODO');
-            query_is('a b, (c, d' => or(and(word('a'), word('b')), or(word('c'), word('d'))), '3.7b INCORRECT -- replace by above TODO');
-            query_is('(a, b) (c, d' => and(or(word('a'), word('b')), or(word('c'), word('d'))), '3.8');
+            query_is('a, (b, c' => or(atom('a'), or(atom('b'), atom('c'))), '3.6b INCORRECT -- replace by above TODO');
+            query_is('a b, (c, d' => or(and(atom('a'), atom('b')), or(atom('c'), atom('d'))), '3.7b INCORRECT -- replace by above TODO');
+            query_is('(a, b) (c, d' => and(or(atom('a'), atom('b')), or(atom('c'), atom('d'))), '3.8');
         };
         subtest '4. Explicit parens' => sub {
             TODO "EXPECTED (should work, but doesn't)" => sub {
-                query_is('a, b) c' => and(or(word('a'), word('b')), word('c')), '4.1');
+                query_is('a, b) c' => and(or(atom('a'), atom('b')), atom('c')), '4.1');
             };
-            query_is('(a, b) c' => and(or(word('a'), word('b')), word('c')), '4.1b INCORRECT -- replace by above TODO');
-            query_is('a, b c' => or(word('a'), and(word('b'), word('c'))), '4.2');
-            query_is('a b, c' => or(and(word('a'), word('b')), word('c')), '4.3');
-            query_is('(a b), c' => or(and(word('a'), word('b')), word('c')), '4.4');
-            query_is('(a, b) c' => and(or(word('a'), word('b')), word('c')), '4.5');
+            query_is('(a, b) c' => and(or(atom('a'), atom('b')), atom('c')), '4.1b INCORRECT -- replace by above TODO');
+            query_is('a, b c' => or(atom('a'), and(atom('b'), atom('c'))), '4.2');
+            query_is('a b, c' => or(and(atom('a'), atom('b')), atom('c')), '4.3');
+            query_is('(a b), c' => or(and(atom('a'), atom('b')), atom('c')), '4.4');
+            query_is('(a, b) c' => and(or(atom('a'), atom('b')), atom('c')), '4.5');
         };
         subtest '5. Implicit parens' => sub {
-            query_is('a b, c' => or(and(word('a'), word('b')), word('c')), '5.1');
-            query_is('a, b c' => or(word('a'), and(word('b'), word('c'))), '5.2');
-            query_is('a b c, d' => or(and(word('a'), word('b'), word('c')), word('d')), '5.3');
-            query_is('a, b c d' => or(word('a'), and(word('b'), word('c'), word('d'))), '5.4');
-            query_is('a b, c d' => or(and(word('a'), word('b')), and(word('c'), word('d'))), '5.5');
-            query_is('a b c, d e f' => or(and(word('a'), word('b'), word('c')), and(word('d'), word('e'), word('f'))), '5.6');
-            query_is('a, b c, d' => or(word('a'), and(word('b'), word('c')), word('d')), '5.7');
-            query_is('a b, c d e, f g' => or(and(word('a'), word('b')), and(word('c'), word('d'), word('e')), and(word('f'), word('g'))), '5.8');
-            query_is('a b, c' => or(and(word('a'), word('b')), word('c')), '5.9');
-            query_is('((a, b c) e, f)' => or(and(or(word('a'), and(word('b'), word('c'))), word('e')), word('f')), '5.10');
+            query_is('a b, c' => or(and(atom('a'), atom('b')), atom('c')), '5.1');
+            query_is('a, b c' => or(atom('a'), and(atom('b'), atom('c'))), '5.2');
+            query_is('a b c, d' => or(and(atom('a'), atom('b'), atom('c')), atom('d')), '5.3');
+            query_is('a, b c d' => or(atom('a'), and(atom('b'), atom('c'), atom('d'))), '5.4');
+            query_is('a b, c d' => or(and(atom('a'), atom('b')), and(atom('c'), atom('d'))), '5.5');
+            query_is('a b c, d e f' => or(and(atom('a'), atom('b'), atom('c')), and(atom('d'), atom('e'), atom('f'))), '5.6');
+            query_is('a, b c, d' => or(atom('a'), and(atom('b'), atom('c')), atom('d')), '5.7');
+            query_is('a b, c d e, f g' => or(and(atom('a'), atom('b')), and(atom('c'), atom('d'), atom('e')), and(atom('f'), atom('g'))), '5.8');
+            query_is('a b, c' => or(and(atom('a'), atom('b')), atom('c')), '5.9');
+            query_is('((a, b c) e, f)' => or(and(or(atom('a'), and(atom('b'), atom('c'))), atom('e')), atom('f')), '5.10');
             TODO "EXPECTED (should work, but doesn't)" => sub {
-                query_is('((a b, c), e f)' => or(and(word('a'), word('b')), word('c'), and(word('e'), word('f'))), '5.11');
+                query_is('((a b, c), e f)' => or(and(atom('a'), atom('b')), atom('c'), and(atom('e'), atom('f'))), '5.11');
             };
-            query_is('((a b, c), e f)' => or(or(and(word('a'), word('b')), word('c')), and(word('e'), word('f'))), '5.11b INCORRECT -- replace by above TODO');
+            query_is('((a b, c), e f)' => or(or(and(atom('a'), atom('b')), atom('c')), and(atom('e'), atom('f'))), '5.11b INCORRECT -- replace by above TODO');
         };
         subtest '6. Single item in parenthesis' => sub {
-            query_is('a' => word('a'), '6.1');
-            query_is('-a' => neg(word('a')), '6.2');
-            query_is('--a' => word('a'), '6.3');
-            query_is('---a' => neg(word('a')), '6.4');
-            query_is('(a)' => word('a'), '6.5');
-            query_is('(-a)' => neg(word('a')), '6.6');
-            query_is('-(a)' => neg(word('a')), '6.7');
-            query_is('-(-a)' => word('a'), '6.8');
-            query_is('(-(-a))' => word('a'), '6.9');
-            query_is('-(-(-a))' => neg(word('a')), '6.10');
+            query_is('a' => atom('a'), '6.1');
+            query_is('-a' => neg(atom('a')), '6.2');
+            query_is('--a' => atom('a'), '6.3');
+            query_is('---a' => neg(atom('a')), '6.4');
+            query_is('(a)' => atom('a'), '6.5');
+            query_is('(-a)' => neg(atom('a')), '6.6');
+            query_is('-(a)' => neg(atom('a')), '6.7');
+            query_is('-(-a)' => atom('a'), '6.8');
+            query_is('(-(-a))' => atom('a'), '6.9');
+            query_is('-(-(-a))' => neg(atom('a')), '6.10');
         };
         subtest '7. Removal of empty paren' => sub {
-            query_is('a () b' => and(word('a'), word('b')), '7.1');
-            query_is('a -() b' => and(word('a'), word('b')), '7.2');
+            query_is('a () b' => and(atom('a'), atom('b')), '7.1');
+            query_is('a -() b' => and(atom('a'), atom('b')), '7.2');
         };
         subtest '8. Leading space or comma should not affect paren' => sub {
-            query_is('(,a b)' => and(word('a'), word('b')), '8.1');
-            query_is('( a,b)' => or(word('a'), word('b')), '8.2');
+            query_is('(,a b)' => and(atom('a'), atom('b')), '8.1');
+            query_is('( a,b)' => or(atom('a'), atom('b')), '8.2');
         };
         subtest '9. Unwrapping of parenthesis with same AND/OR as parent' => sub {
             TODO "EXPECTED (should work, but doesn't)" => sub {
-                query_is('(a b) c' => and(word('a'), word('b'), word('c')), '9.1');
-                query_is('a (b c)' => and(word('a'), word('b'), word('c')), '9.2');
-                query_is('(a, b), c' => or(word('a'), word('b'), word('c')), '9.3');
+                query_is('(a b) c' => and(atom('a'), atom('b'), atom('c')), '9.1');
+                query_is('a (b c)' => and(atom('a'), atom('b'), atom('c')), '9.2');
+                query_is('(a, b), c' => or(atom('a'), atom('b'), atom('c')), '9.3');
             };
-            query_is('(a b) c' => and(and(word('a'), word('b')), word('c')), '9.1b INCORRECT -- replace by above TODO');
-            query_is('a (b c)' => and(word('a'), and(word('b'), word('c'))), '9.2b INCORRECT -- replace by above TODO');
-            query_is('(a, b), c' => or(or(word('a'), word('b')), word('c')), '9.3b INCORRECT -- replace by above TODO');
+            query_is('(a b) c' => and(and(atom('a'), atom('b')), atom('c')), '9.1b INCORRECT -- replace by above TODO');
+            query_is('a (b c)' => and(atom('a'), and(atom('b'), atom('c'))), '9.2b INCORRECT -- replace by above TODO');
+            query_is('(a, b), c' => or(or(atom('a'), atom('b')), atom('c')), '9.3b INCORRECT -- replace by above TODO');
         };
         done_testing();
     }
@@ -1488,6 +1488,8 @@ purpose of these is to be able to provide alternate functions, e.g. for
 producing highlighted output, for dumping the query in cleaned up form.
 (2025-12-07 22:19--22:48)
 
+B<v0.7.26> - Renamed query type C<word> to C<atom>. (2025-12-07 22:48--23:06)
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1518,9 +1520,14 @@ Hence, this little project! :)
 
 =head2 Internal Query Format
 
-Query consists of subqueries and terms. A subquery is a parenthesis + its
-content, and an atom is a search 'word', optionally prefixed by 'not' (B<->) or
-'field' (B<=>) modifiers.
+Query consists of terms. A term can be either a parenthesis or an atom. A
+parenthesis (with type C<and> or C<or>) implements a Boolean operator, while an
+atom (with the type C<atom>) is a record matching function.
+
+Both parentheses and atoms have the additional properties C<not> and C<field>,
+which are used to represent the query prefixes C<B<->> (negation) and C<B<=>>
+(exact field matching). However, before searching, the query is normalized
+which means pushing the properties out to query leaf nodes.
 
 Internally query tree structure, consisting of a nested list, where the leaves
 are functions. These matcher functions are called for each field/value pair,
