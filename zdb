@@ -10,7 +10,7 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.26';                         # https://semver.org/
+our $VERSION='0.7.27';                         # https://semver.org/
 our $VERSION_DATE='7 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -1400,12 +1400,12 @@ approaching done, but generating the query function from the parse tree remains
 to do be done. Also, the internal representation of the parse tree will most
 likely change. (2025-11-28 18:30--13:45)
 
-B<v0.7.1> - Added tests for `Query::_parse()`, and got the 'bottomless' stack
+B<v0.7.1> - Added tests for C<Query::_parse()>, and got the 'bottomless' stack
 feature to work (meaning that unmatched ')' in the syntax query now works too).
 (2025-11-30 13:20--14:11, 20:20--22:12; 2025-12-01 08:16--10:40, 11:21--13:50,
 15:50--16:48, 23:03--23:34)
 
-B<v0.7.2> - Test callback function now declared using `sub {}`. (2025-12-01
+B<v0.7.2> - Test callback function now declared using C<sub {}>. (2025-12-01
 23:42--23:50)
 
 B<v0.7.3> - Remove use of 'plain' object property when parsing (& testing)
@@ -1490,6 +1490,8 @@ producing highlighted output, for dumping the query in cleaned up form.
 
 B<v0.7.26> - Renamed query type C<word> to C<atom>. (2025-12-07 22:48--23:06)
 
+B<v0.7.27> - Minor docs update on internal structure. (2025-12-07 23:06--23:21)
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1529,52 +1531,28 @@ which are used to represent the query prefixes C<B<->> (negation) and C<B<=>>
 (exact field matching). However, before searching, the query is normalized
 which means pushing the properties out to query leaf nodes.
 
-Internally query tree structure, consisting of a nested list, where the leaves
-are functions. These matcher functions are called for each field/value pair,
-and aggregated. When not matching they should return the empty list, and when
-matching they return the field and value pair again, with possible highlights
-(achieved using ANSI escape code for inverting '\e[7m...\e[27m'). When a
-matcher function is called without arguments, it should return data about
-itself (exact format to be decided) -- this is to allow for creating a
-cleaned-up version of the original query by traversing the tree.
-
-The root node of the tree is always OR:ed, and nodes inside that are AND:ed,
-and those inside those are OR:ed etc.
-
-    or
-    |and       and
-    ||or  or   |
-    |||   |    |
-    [[[], []], []]
-
-When creating the query a function that returns a function is used. A query may
-thus be constructed along the lines of:
-
-                or
-                |and
-                ||
-    my $query = [[value_regex(qr/name/i), value_regex(qr/McGuffin/i)]]
-
-This would result in a query that'll find all records which have a field
-'name', and a value containing 'McGuffin' (case-insensitively). More complex
-functions could of course be constructed, maybe something like?
-
-    regex({ name => qr/name/i, value => qr/McGuffin/i })
+The inputted query (or queries, if using multiple B<-e>/B<--match=>I<QUERY>
+options are given) are parsed, normalized and compiled. Parsing means
+converting the argument given by the user from text into query tree.
+Normalization performs certain operation on this tree (such as rewriting the
+query into Negation Normal Form). And finally compilation converts query tree
+into a function, which (when invoked with a database record as input) can
+determine whether that record matches the query or not.
 
 
 =head2 Internal Database Representation
 
-In the main loop `read_record()` is called over and over until the entire file
+In the main loop C<read_record()> is called over and over until the entire file
 has been read. (And the query is used in turn for each record to determine
-whether or not to output it.) `read_record()` returns two values, first is a
+whether or not to output it.) C<read_record()> returns two values, first is a
 string containing the leading whitespace (i.e. the whitespace occurring between
 this record and the previous one), second is an array containing one hashref
 for each field in the record. The hashref has the following format:
 
     { field => ..., value => ..., space => [..., ..., ...] }
 
-Where `field` & `value` are the name & value of the field (these are passed to
-the matcher functions when performing a query), and `space` contains the
+Where C<field> & C<value> are the name & value of the field (these are passed
+to the matcher functions when performing a query), and C<space> contains the
 whitespace coming before the field, between name and value and after the field.
 In the ZDB format the first value is always an empty string, and the last
 always a newline. (These are mostly for future proofing, and having the option
