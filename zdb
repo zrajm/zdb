@@ -10,8 +10,8 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.28';                         # https://semver.org/
-our $VERSION_DATE='7 December 2025';
+our $VERSION='0.7.29';                         # https://semver.org/
+our $VERSION_DATE='8 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -341,11 +341,8 @@ sub record {
 {
     package Query;
     my %lang = (
-        simple => {
-            atom => \&_atom_matcher,
-            and  =>  \&_and_matcher,
-            or   =>   \&_or_matcher,
-        },
+        dump   => { map { $_ => \&{"_${_}_dumper"}  } qw/atom and or/ },
+        simple => { map { $_ => \&{"_${_}_matcher"} } qw/atom and or/ },
     );
 
     sub new {
@@ -475,6 +472,14 @@ sub record {
             field => $field,
         }, map { _normalize($_, $not, $field) } @data];
     }
+
+    sub _prefix {
+        my ($sep, $meta, @str) = @_;
+        (!!$meta->{not} && '-') . (!!$meta->{field} && '=') . join($sep, @str);
+    }
+    sub _atom_dumper { my $x = _prefix('', @_); sub { $x } }
+    sub _and_dumper { my $x = _prefix(' ', shift, map $_->(), @_); sub { $x } }
+    sub _or_dumper  { my $x = _prefix(',', shift, map $_->(), @_); sub { $x } }
 
     # Match regex, return pairs of matching start/end positions or undef.
     # FIXME: Return pairs of matching start/end positions or undef.
@@ -895,6 +900,9 @@ $pager_pid = open(STDOUT, '|-', $opt{pager})   # send all STDOUT through pager
 # (Make Query() accept multiple args, and OR them together.)
 my $query = new Query(simple => join(',', @query));
 my $zdb = new ZDB($opt{file});
+
+say 'QUERY: ' . new Query(dump => join(',', @query))->() if $opt{verbose};
+
 while (my ($prespace, @field) = $zdb->read_record()) {
 
     my $matches = $query->(map { $_->{field}, $_->{value} } @field);
@@ -1492,6 +1500,8 @@ B<v0.7.26> - Renamed query type C<word> to C<atom>. (2025-12-07 22:48--23:06)
 B<v0.7.27> - Minor docs update on internal structure. (2025-12-07 23:06--23:21)
 
 B<v0.7.28> - Simplified B<Query::_compile()>. (2025-12-07 23:23--23:31)
+
+B<v0.7.29> - Implemented query dump output. (2025-12-07 23:33--00:16)
 
 
 =head1 COPYRIGHT AND LICENSE
