@@ -10,8 +10,8 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.29';                         # https://semver.org/
-our $VERSION_DATE='8 December 2025';
+our $VERSION='0.7.30';                         # https://semver.org/
+our $VERSION_DATE='9 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -137,7 +137,7 @@ END {
     } else {
         close STDOUT or die "Can't close standard output: $!\n";
     }
-    wait();                                    # wait for pager to exit
+    { local $?; wait() }                       # wait for pager to exit
 }
 
 # Recutils:
@@ -1502,6 +1502,9 @@ B<v0.7.27> - Minor docs update on internal structure. (2025-12-07 23:06--23:21)
 B<v0.7.28> - Simplified B<Query::_compile()>. (2025-12-07 23:23--23:31)
 
 B<v0.7.29> - Implemented query dump output. (2025-12-07 23:33--00:16)
+
+B<v0.7.30> - Command exit code was always 255, this fixes that. (2025-12-09
+13:20--13:34)
 
 
 =head1 COPYRIGHT AND LICENSE
