@@ -10,7 +10,7 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.30';                         # https://semver.org/
+our $VERSION='0.7.31';                         # https://semver.org/
 our $VERSION_DATE='9 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -20,9 +20,9 @@ Usage: $PROGRAM [OPTION]... [--] QUERY [FIELD=VALUE]... [FILE]
 Manipulate ZDB database.
 
       --color[=WHEN]      When to highlight matches (default: 'auto')
-                          WHEN: 'auto', 'always' or 'never'
-  -c                      Always highlight matches (--color=always)
-  -C                      Never highlight matches (--color=never)
+                          WHEN is 'auto', 'always' or 'never'
+  -c, --color             Always highlight matches (same as --color=always)
+  -C, --no-color          Never highlight matches (same as --color=never)
   -e, --match=QUERY       Specify QUERY explicitly (usually omitted)
   -h, --help              Show this help and exit
       --help-query        Show QUERY syntax (it's very googlish)
@@ -31,8 +31,8 @@ Manipulate ZDB database.
   -M, --manual            Show zdb manual page (with 'man')
       --pager=CMD         Use CMD as pager (default: 'pager')
       --paging[=WHEN]     When to use pager (default: 'auto')
-  -p                      Always use pager (--paging=always)
-  -P                      Never use pager (--paging=never)
+  -p, --paging            Always use pager (same as --paging=always)
+  -P, --no-paging         Never use pager (same as --paging=never)
       --test              Run built-in unit tests
   -v, --verbose           Show debugging output while running
       --version           Show version and exit
@@ -853,7 +853,7 @@ while (@ARGV) {
     s/(?<=^-[^-e]).+//x            and unshift(@ARGV, "-$&"); # bundled opts
     /^        --               $/x and do { push(@arg, @ARGV);          last };
     /^ -c                      $/x and do { $opt{color} = 1;            next };
-    /^ -C                      $/x and do { $opt{color} = 0;            next };
+    /^(-C    |--no-colou?r    )$/x and do { $opt{color} = 0;            next };
     /^        --colou?r(=(.*))?$/x and do { $opt{color} = whenarg($2);  next };
     /^(-e(.*)|--match (=(.*))?)$/x and do { push @query, $2||$4//shift; next };
     /^(-h    |--help          )$/x and do { $out = $USAGE;              next };
@@ -864,7 +864,7 @@ while (@ARGV) {
     /^        --pager  (=(.*))?$/x and do { $opt{pager} = $2//shift;    next };
     /^        --paging (=(.*))?$/x and do { $opt{paging} = whenarg($2); next };
     /^ -p                      $/x and do { $opt{paging} = 1;           next };
-    /^ -P                      $/x and do { $opt{paging} = 0;           next };
+    /^(-P    |--no-paging     )$/x and do { $opt{paging} = 0;           next };
     /^(       --test          )$/x and do { $opt{test} = 1;             next };
     /^(-v    |--verbose       )$/x and do { $opt{verbose} = 1;          next };
     /^(       --version       )$/x and do { $out = version();           next };
@@ -977,7 +977,7 @@ I<FIELD>B<=>I<VALUE> arguments were provided or not):
 
 =item B<--color>[B<=>I<WHEN>], B<--colour>[B<=>I<WHEN>] (default: B<auto>)
 
-Whether to highlight search matches in the output.
+When to highlight search matches in the output.
 
 I<WHEN> may be one of the following (B<--paging> works the same):
 
@@ -995,18 +995,20 @@ piped the output to another command (S<C<| CMD>>) or directed it to a file
 =back
 
 Using B<--color> (without I<WHEN>) means B<--color=always>; omitting the option
-altogether means B<--color=auto>. (See also B<-c> and B<-C>.) (Option inspired
-by B<grep>/B<ls> with semantics matching B<ls>, that is, using option without
-arg means B<--color=always>, and I<WHEN> values B<yes>/B<force>, B<no>/B<none>
-and B<tty>/B<if-tty> are only supported by B<ls>, not B<grep>.)
+altogether means B<--color=auto> (also see B<-c> and B<-C>). (Option inspired
+by B<grep>/B<ls>, borrowing the semantics from B<ls>, that is, using option
+without arg means B<--color=always>, and I<WHEN> values B<yes>/B<force>,
+B<no>/B<none> and B<tty>/B<if-tty> are only supported by B<ls>, not B<grep>.)
 
-=item B<-c>
+=item B<-c>, B<--color>, B<--colour>
 
-Enable highlighting. Short for B<--color=always>.
+Enable highlighting. Short for B<--color=always>. (Using B<--color> is the same
+as B<--color>[B<=>I<WHEN>] without specifying the I<WHEN> argument.)
 
-=item B<-C>
+=item B<-C>, B<--no-color>, B<--no-colour>
 
-Disable highlighting. Short for B<--color=never>.
+Disable highlighting. Short for B<--color=never>. (Option B<--no-color> is
+unique to B<zdb>.)
 
 =item B<-e>I<QUERY>, B<--match=>I<QUERY>
 
@@ -1068,20 +1070,22 @@ when searching in B<less>).
 
 =item B<--paging>[B<=>I<WHEN>] (default: B<auto>)
 
-Whether to use a pager for the output.
+When to use a pager for the output.
 
 I<WHEN> may be: B<auto>, B<always> or B<never> (and works the same as for
 B<--color>). Using B<--paging> (without I<WHEN>) means B<--paging=always>; not
-using B<--paging> means B<--paging=auto>. (See also B<--pager=>I<CMD>, B<-p>
-and B<-P>; Option inspired by B<bat>/B<delta>.)
+using B<--paging> means B<--paging=auto> (also see B<--pager=>I<CMD>, B<-p> and
+B<-P>). (Option inspired by B<bat>/B<delta>.)
 
-=item B<-p>
+=item B<-p>, B<--paging>
 
-Always use pager. (Short for B<--paging=always>.)
+Always use pager. Short for B<--paging=always>. (Using B<--paging> is the same
+as B<--paging>[B<=>I<WHEN>] without specifying the I<WHEN> argument.)
 
-=item B<-P>
+=item B<-P>, B<--no-paging>
 
-Never use pager. (Short for B<--paging=never>; Option inspired by B<bat>.)
+Never use pager. Short for B<--paging=never>. (Option inspired by B<bat>,
+though B<--no-paging> is unique to B<zdb>.)
 
 =item B<--test>
 
@@ -1376,7 +1380,7 @@ use. :( (2025-11-23 13:44--13:58)
 
 B<v0.5.1> - Expanded manpage. Improved chapters DESCRIPTION, QUERIES
 (subchapters 'Logic Operators', 'Field Prefixes' and 'Quoting'). Added and
-clarified a buncha stuff on the 'FUTURE' wishlist. (2025-11-25 08:49--11:29)
+clarified a buncha stuff on the L</FUTURE> wishlist. (2025-11-25 08:49--11:29)
 
 B<v0.5.2> - Moved C<< END {} >> block to after info variables. (2025-11-25
 12:31--12:36)
@@ -1398,7 +1402,7 @@ B<v0.6.3> - Additional manpage spellfixes. (2025-11-26 18:59--19:20)
 
 B<v0.6.4> - Corrected B</bin/env> -> B</usr/bin/env>. (2025-11-26 19:20--19:23)
 
-B<v0.6.5> - Added note about hierarchical fields to FUTURE. (2025-11-29
+B<v0.6.5> - Added note about hierarchical fields to L</FUTURE>. (2025-11-29
 00:13--00:25)
 
 B<v0.7.0> - Added some preliminary query parsing and started working on tests
@@ -1505,6 +1509,9 @@ B<v0.7.29> - Implemented query dump output. (2025-12-07 23:33--00:16)
 
 B<v0.7.30> - Command exit code was always 255, this fixes that. (2025-12-09
 13:20--13:34)
+
+B<v0.7.31> - Added options B<--no-color> and B<--no-paging> and updated
+relevant documentation. (2025-12-11 20:38--21:10)
 
 
 =head1 COPYRIGHT AND LICENSE
