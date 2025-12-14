@@ -10,7 +10,7 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.0';                         # https://semver.org/
+our $VERSION='0.8.1';                         # https://semver.org/
 our $VERSION_DATE='14 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -531,9 +531,9 @@ sub highlight {
             : qr/\b${\join('', @str)}\b/iu;
         return sub {
             for (@_) {
-                return !$meta->{not} if m/$regex/;
+                return !$meta->{not} || () if m/$regex/;
             }
-            return $meta->{not};
+            return $meta->{not} || ();
         };
     }
     # Note: Doesn't do negation (done by _atom_matcher()).
@@ -542,7 +542,7 @@ sub highlight {
         my (undef, @func) = @_;
         return sub {
             for (@func) {
-                return '' unless $_->(@_);
+                return () unless $_->(@_);
             }
             return 1;
         };
@@ -555,7 +555,7 @@ sub highlight {
             for (@func) {
                 return 1 if $_->(@_);
             }
-            return '';
+            return ();
         };
     }
 
@@ -781,82 +781,82 @@ sub highlight {
             my $matcher = eval { _atom_matcher(@{ atom('x') }) };
             is(ref($matcher), 'CODE', 'Return coderef');
             is("$@", '', 'Error message') or diag("Error: $@");
-            is_deeply($matcher->('x'), 1, "Match whole word");
-            is_deeply($matcher->('', 'x'), 1, "Match in second field");
-            is_deeply($matcher->('x x'), 1, 'Match multiple words in same field');
-            is_deeply($matcher->('xx'), 0, "Don't match part of word");
-            is_deeply($matcher->(''), 0, "Don't match empty string");
+            is_deeply([ $matcher->('x') ], [1], "Match whole word");
+            is_deeply([ $matcher->('', 'x') ], [1], "Match in second field");
+            is_deeply([ $matcher->('x x') ], [1], 'Match multiple words in same field');
+            is_deeply([ $matcher->('xx') ], [], "Don't match part of word");
+            is_deeply([ $matcher->('') ], [], "Don't match empty string");
         };
         subtest '_atom_matcher() -- field mode' => sub {
             my $matcher = eval { _atom_matcher(@{ atom('x', field => 1) }) };
             is(ref($matcher), 'CODE', 'Return coderef');
             is("$@", '', 'Error message') or diag("Error: $@");
-            is_deeply($matcher->('x'), 1, "Match whole field");
-            is_deeply($matcher->('', 'x'), 1, "Match in second field");
-            is_deeply($matcher->('x x'), 0, "Don't match part of field");
-            is_deeply($matcher->('xx'), 0, "Don't match part of word");
-            is_deeply($matcher->(''), 0, "Don't match empty string");
+            is_deeply([ $matcher->('x') ], [1], "Match whole field");
+            is_deeply([ $matcher->('', 'x') ], [1], "Match in second field");
+            is_deeply([ $matcher->('x x') ], [], "Don't match part of field");
+            is_deeply([ $matcher->('xx') ], [], "Don't match part of word");
+            is_deeply([ $matcher->('') ], [], "Don't match empty string");
         };
         subtest '_atom_matcher() -- negated' => sub {
             my $matcher = eval { _atom_matcher(@{ atom('x', not => 1) }) };
             is(ref($matcher), 'CODE', 'Return coderef');
             is("$@", '', 'Error message') or diag("Error: $@");
-            is_deeply($matcher->('x'), '', "Don't match a whole field");
-            is_deeply($matcher->('', 'x'), '', "Don't match if in second field");
-            is_deeply($matcher->('x x'), '', 'Match multiple words in same field');
-            is_deeply($matcher->('xx'), 1, "Don't match as part of a word");
-            is_deeply($matcher->(''), 1, "Match empty string");
+            is_deeply([ $matcher->('x') ], [], "Don't match a whole field");
+            is_deeply([ $matcher->('', 'x') ], [], "Don't match if in second field");
+            is_deeply([ $matcher->('x x') ], [], 'Match multiple words in same field');
+            is_deeply([ $matcher->('xx') ], [1], "Don't match as part of a word");
+            is_deeply([ $matcher->('') ], [1], "Match empty string");
         };
         subtest '_and_matcher()' => sub {
             note('Allowed callback return values');
-            is_deeply(_and_matcher(undef, sub { 'x' })->(),  1, 'Single truthy');
-            is_deeply(_and_matcher(undef, sub {   1 })->(),  1, 'Single truthy');
-            is_deeply(_and_matcher(undef, sub {  '' })->(), '', 'Single falsy');
-            is_deeply(_and_matcher(undef, sub {   0 })->(), '', 'Single falsy');
+            is_deeply([ _and_matcher(undef, sub { 'x' })->() ], [1], 'Single truthy');
+            is_deeply([ _and_matcher(undef, sub {   1 })->() ], [1], 'Single truthy');
+            is_deeply([ _and_matcher(undef, sub {  '' })->() ], [], 'Single falsy');
+            is_deeply([ _and_matcher(undef, sub {   0 })->() ], [], 'Single falsy');
             note('Test Boolean functions');
-            is_deeply(_and_matcher(undef, sub { 0 }, sub { 0 })->(),
-                      '', 'Two falsy = falsy');
-            is_deeply(_and_matcher(undef, sub { 0 }, sub { 1 })->(),
-                      '', 'Falsy + truthy = falsy');
-            is_deeply(_and_matcher(undef, sub { 1 }, sub { 0 })->(),
-                      '', 'Truthy + falsy = falsy');
-            is_deeply(_and_matcher(undef, sub { 1 }, sub { 1 })->(),
-                      1, 'Two truthy = truthy');
+            is_deeply([ _and_matcher(undef, sub { 0 }, sub { 0 })->() ],
+                      [], 'Two falsy = falsy');
+            is_deeply([ _and_matcher(undef, sub { 0 }, sub { 1 })->() ],
+                      [], 'Falsy + truthy = falsy');
+            is_deeply([ _and_matcher(undef, sub { 1 }, sub { 0 })->() ],
+                      [], 'Truthy + falsy = falsy');
+            is_deeply([ _and_matcher(undef, sub { 1 }, sub { 1 })->() ],
+                      [1], 'Two truthy = truthy');
             note('Test that input is passed to (invoked) callbacks');
             my ($x, $y, $z);
-            ok(!_and_matcher(
+            is_deeply([ _and_matcher(
                 undef,
                 sub { $x = \@_; 1 },
                 sub { $y = \@_; 0 },  # returns false
                 sub { $z = \@_; 1 },  #   thus this func won't run
-            )->('INPUT'), 'Return value');
+            )->('INPUT') ], [], 'Return value');
             is_deeply($x, ['INPUT'], '1st subfunction get args');
             is_deeply($y, ['INPUT'], '2nd subfunction get args');
             is_deeply($z, undef, "3rd function short-circuited, don't get args");
         };
         subtest '_or_matcher()' => sub {
             note('Allowed callback return values');
-            is_deeply(_or_matcher(undef, sub { 'x' })->(),  1, 'Single truthy');
-            is_deeply(_or_matcher(undef, sub {   1 })->(),  1, 'Single truthy');
-            is_deeply(_or_matcher(undef, sub {  '' })->(), '', 'Single falsy');
-            is_deeply(_or_matcher(undef, sub {   0 })->(), '', 'Single falsy');
+            is_deeply([ _or_matcher(undef, sub { 'x' })->() ], [1], 'Single truthy');
+            is_deeply([ _or_matcher(undef, sub {   1 })->() ], [1], 'Single truthy');
+            is_deeply([ _or_matcher(undef, sub {  '' })->() ], [], 'Single falsy');
+            is_deeply([ _or_matcher(undef, sub {   0 })->() ], [], 'Single falsy');
             note('Test Boolean functions');
-            is_deeply(_or_matcher(undef, sub { 0 }, sub { 0 })->(),
-                      '', 'Two falsy = falsy');
-            is_deeply(_or_matcher(undef, sub { 0 }, sub { 1 })->(),
-                      1, 'Falsy + truthy = truthy');
-            is_deeply(_or_matcher(undef, sub { 1 }, sub { 0 })->(),
-                      1, 'Truthy + falsy = truthy');
-            is_deeply(_or_matcher(undef, sub { 1 }, sub { 1 })->(),
-                      1, 'Two truthy = truthy');
+            is_deeply([ _or_matcher(undef, sub { 0 }, sub { 0 })->() ],
+                      [], 'Two falsy = falsy');
+            is_deeply([ _or_matcher(undef, sub { 0 }, sub { 1 })->() ],
+                      [1], 'Falsy + truthy = truthy');
+            is_deeply([ _or_matcher(undef, sub { 1 }, sub { 0 })->() ],
+                      [1], 'Truthy + falsy = truthy');
+            is_deeply([ _or_matcher(undef, sub { 1 }, sub { 1 })->() ],
+                      [1], 'Two truthy = truthy');
             note('Test that input is passed to (invoked) callbacks');
             my ($x, $y, $z);
-            ok(_or_matcher(
+            is_deeply([ _or_matcher(
                 undef,
                 sub { $x = \@_; 0 },
                 sub { $y = \@_; 1 },  # returns true
                 sub { $z = \@_; 0 },  #   thus this func won't run
-            )->('INPUT'), 'Return value');
+            )->('INPUT') ], [1], 'Return value');
             is_deeply($x, ['INPUT'], '1st subfunction get args');
             is_deeply($y, ['INPUT'], '2nd subfunction get args');
             is_deeply($z, undef, "3rd function short-circuited, don't get args");
@@ -1309,7 +1309,8 @@ while (my ($prespace, @field) = $zdb->read_record()) {
     if (@mark) {
         print $prespace;
         foreach (@field) {
-            my ($field_highlight, $value_highlight) = splice(@mark, 0, 2);
+            my ($field_highlight, $value_highlight)
+                = $opt{color} ? splice(@mark, 0, 2) : [];
             print(
                 ($_->{space}[0]   // '')
                 . (highlight($_->{field}, @$field_highlight) // '') # highlight
@@ -1922,6 +1923,10 @@ matching logic. (2025-12-08 01:20--02:16, 14:15--17:03, 17:49--18:51,
 22:01--22:24, 2025-12-13 02:39--03:07, 12:06--12:39, 12:52--13:11, 2025-12-14
 00:58--01:54, 02:19--04:01)
 
+B<v0.8.1> - Search now highlighting disabled now works (again). This involved
+making the _matcher() functions return true/false even in list context. Updated
+unit tests accordingly. (2025-12-14 04:01--04:15, 18:29--18:58, 19:31--20:14)
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1999,9 +2004,7 @@ comments that will be fixed in the future as well.)
 
 =over 4
 
-=item Implement match highlighting
-
-=item Make B<-C> option work
+=item Add unit test for highlight()
 
 =item Terminfo/termcap
 
@@ -2031,7 +2034,7 @@ searched.
 
 =over 4
 
-=item Colorize test result
+=item Colorize unit test results
 
 Failures should be clearly highlighted. The final result of the test suite
 should be clearly indicated ('FAIL' or 'PASS' with red or green background).
