@@ -10,8 +10,8 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.7.31';                         # https://semver.org/
-our $VERSION_DATE='9 December 2025';
+our $VERSION='0.8.0';                         # https://semver.org/
+our $VERSION_DATE='14 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -198,6 +198,38 @@ sub record {
     return \@record;
 }
 
+# Is invoked for every text string.
+sub highlight {
+    my ($str, @marks) = @_;
+
+    # Normalize ranges into a flat list of marks
+    # Each mark: [N, 'beg'|'end']
+    my @mark = sort {
+        $a->[0] <=> $b->[0] or $a->[1] cmp $b->[1];
+    } map {
+        my ($beg, $end) = @$_;
+        (defined $beg and defined $end)   # FIXME: needed?
+            ? ([$beg, 'beg'], [$end, 'end']) : ();
+    } @marks;
+
+    my ($lvl, $prev_mark, $out) = (0, 0, '');
+    while (@mark) {
+        my ($pos, $type) = @{ shift(@mark) };
+
+        # Get text up to this mark.
+        $out .= substr($str, $prev_mark, $pos - $prev_mark);
+        $prev_mark = $pos;
+
+        # Insert ANSI color code.
+        $lvl += ($type eq 'beg') ? +1 : -1;
+        #$out .= $lvl > 0 ? "\e[1;30;44m" : "\e[22;39;49;22m";
+        $out .= ($lvl > 1 ? "\e[1;30;104m" :  # bright background
+                 $lvl > 0 ? "\e[22;30;44m" :  # colored background
+                 "\e[22;39;49;22m");          # black background
+    }
+    return $out . substr($str, $prev_mark);
+}
+
 ###############################################################################
 
 # FIXME: Be smarter. Don't load entire file into memory in constructor.
@@ -341,8 +373,9 @@ sub record {
 {
     package Query;
     my %lang = (
-        dump   => { map { $_ => \&{"_${_}_dumper"}  } qw/atom and or/ },
-        simple => { map { $_ => \&{"_${_}_matcher"} } qw/atom and or/ },
+        dump  => { map { $_ => \&{"_${_}_dumper"}     } qw/atom and or/ },
+        plain => { map { $_ => \&{"_${_}_matcher"}    } qw/atom and or/ },
+        color => { map { $_ => \&{"_${_}_aggregator"} } qw/atom and or/ },
     );
 
     sub new {
@@ -477,31 +510,36 @@ sub record {
         my ($sep, $meta, @str) = @_;
         (!!$meta->{not} && '-') . (!!$meta->{field} && '=') . join($sep, @str);
     }
-    sub _atom_dumper { my $x = _prefix('', @_); sub { $x } }
-    sub _and_dumper { my $x = _prefix(' ', shift, map $_->(), @_); sub { $x } }
-    sub _or_dumper  { my $x = _prefix(',', shift, map $_->(), @_); sub { $x } }
+    sub _atom_dumper { my $x = _prefix('',                     @_); sub { $x } }
+    sub  _and_dumper { my $x = _prefix(' ', shift, map $_->(), @_); sub { $x } }
+    sub   _or_dumper { my $x = _prefix(',', shift, map $_->(), @_); sub { $x } }
 
-    # Match regex, return pairs of matching start/end positions or undef.
-    # FIXME: Return pairs of matching start/end positions or undef.
-    # FIXME: For repeated matches, start searching at BEGINNING of previous match
-    # position (+ 1) so as to find overlapping search terms.
+    # Create string matcher function. Initial call returns a matcher function
+    # (a coderef). For initial call, first arg (a hashref) contains options.
+    # With 'field' falsy matches word-by-word, with 'field' truthy matches
+    # against whole strings. With 'not' true, search logic is negated.
+    #
+    # Invoke coderef with a set of strings to test if they match. If matching
+    # returns true, otherwise false.
+    #
+    # FIXME: Consistent truthy/falsy values. Now return '' for false when
+    # negated, and 0 when not negated.
     sub _atom_matcher {
         my ($meta, @str) = @_;
         my $regex = $meta->{field}
             ? qr/\A${\join('', @str)}\Z/iu
             : qr/\b${\join('', @str)}\b/iu;
         return sub {
-            # FIXME: Only returns true/false now. Fix!
             for (@_) {
                 return !$meta->{not} if m/$regex/;
             }
             return $meta->{not};
         };
     }
-
-    # FIXME: Merge output from matcher functions & return that.
+    # Note: Doesn't do negation (done by _atom_matcher()).
+    # First argument is completely ignored here.
     sub _and_matcher {
-        my ($meta, @func) = @_;
+        my (undef, @func) = @_;
         return sub {
             for (@func) {
                 return '' unless $_->(@_);
@@ -509,16 +547,116 @@ sub record {
             return 1;
         };
     }
-
-    # FIXME: Merge output from matcher functions & return that.
-    # FIXME: Match everything, not just first match.
+    # Note: Doesn't do negation (done by _atom_matcher()).
+    # First argument is completely ignored here.
     sub _or_matcher {
-        my ($meta, @func) = @_;
+        my (undef, @func) = @_;
         return sub {
             for (@func) {
                 return 1 if $_->(@_);
             }
             return '';
+        };
+    }
+
+    # Create string matcher function. Initial call returns a matcher function
+    # (a coderef). For initial call, first arg (a hashref) contains options.
+    # With 'field' falsy matches word-by-word, with 'field' truthy matches
+    # against whole strings. With 'not' true, search logic is negated.
+    #
+    # Invoke coderef with a set of strings to test if they match. If matching
+    # returns arrayrefs (one for each input string), otherwise undef. The
+    # returned arrayrefs each contain a list of start/end offsets pinpointing
+    # where in the string the match was found. Format (for each string):
+    # [[BEG1,END1],[BEG2,END2]...]
+    #
+    # FIXME: For repeated matches, start searching at BEGINNING of previous match
+    # position (+ 1) so as to find overlapping search terms.
+    sub _atom_aggregator {
+        my ($meta, @str) = @_;
+        my $regex = $meta->{field}
+            ? qr/\A${\join('', @str)}\Z/iu
+            : qr/\b${\join('', @str)}\b/iu;
+        # Negative match. Return empty highlight data on match, undef
+        # otherwise. (Stop on first match, for efficiency.)
+        $meta->{not} and return sub {
+            for (@_) { return () if m/$regex/ }
+            return (map [], 1..@str);
+        };
+        # Positive match. Return highlight data on match, undef otherwise.
+        # (Won't stop on first match, since we need all matches to be
+        # highlighted.)
+        return sub {
+            my @pair = @_;
+            my $found = '';
+            my @out = map {
+                my @mark;
+                while (/$regex/g) {
+                    push @mark, [$-[0], $+[0]];
+                    # pos($_) = $-[0] + 1;
+                }
+                $found = 1 if @mark;
+                \@mark;
+            } @pair;
+            return $found ? @out : ();
+        };
+    }
+
+    # Combine elements in each arg with each other. Args are listrefs
+    # containing listrefs. 1st listref of each input arg are combined into one
+    # list and returned as 1st listref value, 2nd listref of each arg are
+    # returned as 2nd value, etc.
+    #
+    # Each input value must be list-of-lists (which may contain whatever).
+    #
+    # Example: _aggregate([['a', 'b'], ['c']], [['1'], ['2', '3']])
+    # Returns: (['a', 'b', '1'], ['c', '2', '3'])
+    sub _aggregate {
+        my @out;
+        for my $arr (@_) {
+            for my $i (0 .. $#$arr) {
+                push @{ $out[$i] }, @{ $arr->[$i] };
+            }
+        }
+        return @out;
+    }
+
+    # Create Boolean AND aggregator function. Initial call returns a Boolean
+    # operator function (a coderef). For initial call, first arg is ignored,
+    # the remaining are functions to be invoked by coderef call.
+    #
+    # Invoking coderef with a set of strings passes the given strings to each
+    # callback in turn, and applies AND logic to their return values (zero
+    # return values = false, one or more = true). Returns falsy/empty list if a
+    # callback returns false (this also aborts running further callbacks),
+    # Returns true if all callbacks return true.
+    #
+    # Callbacks are expected to return zero (=falsy) or more (=truthy)
+    # listrefs-of-listrefs with highlight offset positions for the matches
+    # found. A negated match may also return an empty listref (to indicate a
+    # match with no highlights).
+    sub _and_aggregator {
+        my (undef, @func) = @_;
+        return sub {
+            # Invoke subexpressions (lazily = abort on first non-matching).
+            return _aggregate(map {
+                my @x = $_->(@_) or return (); # false = return immediately
+                \@x;
+            } @func);
+        };
+    }
+
+    # Non-short circuiting in order to find all matches.
+    sub _or_aggregator {
+        my (undef, @func) = @_;
+        return sub {
+            # Invoke subexpressions (non-lazily, highlights needed for all).
+            my $found = '';
+            my @found = map {
+                my @x = $_->(@_) and $found = 1;# true = remember it
+                \@x;
+            } @func;
+            return $found ? _aggregate(@found) : ();
         };
     }
 
@@ -562,6 +700,26 @@ sub record {
             local $Test::Builder::Level = $Test::Builder::Level + 1;
             is_deeply(_parse($query_str), $want,
                       "query: «$query_str»" . ($msg && " ($msg)"));
+        }
+        sub dies_with(&$;$) {
+            my ($code, $str, $name) = @_;
+            local $@;
+            local $Test::Builder::Level = $Test::Builder::Level + 1;
+            my $regex = qr/^\Q$str/;
+            if (eval { $code->(); 1 }) {       # no exception thrown
+                fail($name);
+                note("Expected code to die, but it ran to completion");
+                return ();
+            }
+            my $err = $@;
+            if ($err =~ $regex) {
+                pass($name);
+                return 1;
+            }
+            fail($name);                       # wrong error message
+            diag("expected: '$str' (at start of error message)\n",
+                 "     got: '$err'");
+            return ();
         }
         state sub TODO {
             my ($msg, $coderef, @args) = @_;
@@ -618,6 +776,249 @@ sub record {
                 is_deeply(_normalize(       or(atom('a'),  field(atom('b')) )),  or(      atom('a'),  field(atom('b'))), '« ( a,=b)» -> «( a,=b)»');
                 is_deeply(_normalize(field( or(atom('a'),  field(atom('b'))))),  or(field(atom('a')),       atom('b') ), '«=( a,=b)» -> «(=a, b)»');
             };
+        };
+        subtest '_atom_matcher() -- word mode' => sub {
+            my $matcher = eval { _atom_matcher(@{ atom('x') }) };
+            is(ref($matcher), 'CODE', 'Return coderef');
+            is("$@", '', 'Error message') or diag("Error: $@");
+            is_deeply($matcher->('x'), 1, "Match whole word");
+            is_deeply($matcher->('', 'x'), 1, "Match in second field");
+            is_deeply($matcher->('x x'), 1, 'Match multiple words in same field');
+            is_deeply($matcher->('xx'), 0, "Don't match part of word");
+            is_deeply($matcher->(''), 0, "Don't match empty string");
+        };
+        subtest '_atom_matcher() -- field mode' => sub {
+            my $matcher = eval { _atom_matcher(@{ atom('x', field => 1) }) };
+            is(ref($matcher), 'CODE', 'Return coderef');
+            is("$@", '', 'Error message') or diag("Error: $@");
+            is_deeply($matcher->('x'), 1, "Match whole field");
+            is_deeply($matcher->('', 'x'), 1, "Match in second field");
+            is_deeply($matcher->('x x'), 0, "Don't match part of field");
+            is_deeply($matcher->('xx'), 0, "Don't match part of word");
+            is_deeply($matcher->(''), 0, "Don't match empty string");
+        };
+        subtest '_atom_matcher() -- negated' => sub {
+            my $matcher = eval { _atom_matcher(@{ atom('x', not => 1) }) };
+            is(ref($matcher), 'CODE', 'Return coderef');
+            is("$@", '', 'Error message') or diag("Error: $@");
+            is_deeply($matcher->('x'), '', "Don't match a whole field");
+            is_deeply($matcher->('', 'x'), '', "Don't match if in second field");
+            is_deeply($matcher->('x x'), '', 'Match multiple words in same field');
+            is_deeply($matcher->('xx'), 1, "Don't match as part of a word");
+            is_deeply($matcher->(''), 1, "Match empty string");
+        };
+        subtest '_and_matcher()' => sub {
+            note('Allowed callback return values');
+            is_deeply(_and_matcher(undef, sub { 'x' })->(),  1, 'Single truthy');
+            is_deeply(_and_matcher(undef, sub {   1 })->(),  1, 'Single truthy');
+            is_deeply(_and_matcher(undef, sub {  '' })->(), '', 'Single falsy');
+            is_deeply(_and_matcher(undef, sub {   0 })->(), '', 'Single falsy');
+            note('Test Boolean functions');
+            is_deeply(_and_matcher(undef, sub { 0 }, sub { 0 })->(),
+                      '', 'Two falsy = falsy');
+            is_deeply(_and_matcher(undef, sub { 0 }, sub { 1 })->(),
+                      '', 'Falsy + truthy = falsy');
+            is_deeply(_and_matcher(undef, sub { 1 }, sub { 0 })->(),
+                      '', 'Truthy + falsy = falsy');
+            is_deeply(_and_matcher(undef, sub { 1 }, sub { 1 })->(),
+                      1, 'Two truthy = truthy');
+            note('Test that input is passed to (invoked) callbacks');
+            my ($x, $y, $z);
+            ok(!_and_matcher(
+                undef,
+                sub { $x = \@_; 1 },
+                sub { $y = \@_; 0 },  # returns false
+                sub { $z = \@_; 1 },  #   thus this func won't run
+            )->('INPUT'), 'Return value');
+            is_deeply($x, ['INPUT'], '1st subfunction get args');
+            is_deeply($y, ['INPUT'], '2nd subfunction get args');
+            is_deeply($z, undef, "3rd function short-circuited, don't get args");
+        };
+        subtest '_or_matcher()' => sub {
+            note('Allowed callback return values');
+            is_deeply(_or_matcher(undef, sub { 'x' })->(),  1, 'Single truthy');
+            is_deeply(_or_matcher(undef, sub {   1 })->(),  1, 'Single truthy');
+            is_deeply(_or_matcher(undef, sub {  '' })->(), '', 'Single falsy');
+            is_deeply(_or_matcher(undef, sub {   0 })->(), '', 'Single falsy');
+            note('Test Boolean functions');
+            is_deeply(_or_matcher(undef, sub { 0 }, sub { 0 })->(),
+                      '', 'Two falsy = falsy');
+            is_deeply(_or_matcher(undef, sub { 0 }, sub { 1 })->(),
+                      1, 'Falsy + truthy = truthy');
+            is_deeply(_or_matcher(undef, sub { 1 }, sub { 0 })->(),
+                      1, 'Truthy + falsy = truthy');
+            is_deeply(_or_matcher(undef, sub { 1 }, sub { 1 })->(),
+                      1, 'Two truthy = truthy');
+            note('Test that input is passed to (invoked) callbacks');
+            my ($x, $y, $z);
+            ok(_or_matcher(
+                undef,
+                sub { $x = \@_; 0 },
+                sub { $y = \@_; 1 },  # returns true
+                sub { $z = \@_; 0 },  #   thus this func won't run
+            )->('INPUT'), 'Return value');
+            is_deeply($x, ['INPUT'], '1st subfunction get args');
+            is_deeply($y, ['INPUT'], '2nd subfunction get args');
+            is_deeply($z, undef, "3rd function short-circuited, don't get args");
+        };
+        subtest '_aggregate()' => sub {
+            dies_with(sub { _aggregate('x') },
+                q{Can't use string ("x") as an ARRAY ref}, 'Args must be arrayrefs, not string');
+            dies_with(sub { _aggregate([], 'x') },
+                q{Can't use string ("x") as an ARRAY ref}, 'Args must be arrayrefs');
+            dies_with(sub { _aggregate(['x']) },
+                q{Can't use string ("x") as an ARRAY ref}, 'Args must be arrayrefs containing arrayrefs');
+            is_deeply([ _aggregate() ], [], "No args returns empty arrayref");
+            is_deeply([ _aggregate([]) ], [], 'One empty arrayref returns empty arrayref');
+            is_deeply([ _aggregate([], []) ], [], 'Two empty arrayrefs returns empty arrayref');
+            is_deeply([ _aggregate([[]]) ], [[]], 'Args must be arrayrefs containing arrayrefs');
+            is_deeply([ _aggregate([['x']]) ], [['x']], 'Args must be arrayrefs containing arrayrefs');
+            is_deeply([ _aggregate([[qw/x y/]]) ], [[qw/x y/]], 'Args must be arrayrefs containing arrayrefs');
+            is_deeply([ _aggregate([[qw/a b/], [qw/x y/]]) ], [[qw/a b/], [qw/x y/]],
+                      'Args must be arrayrefs containing arrayrefs');
+            is_deeply([ _aggregate(
+                [['a'], [qw/c d/], [qw/e f g/], []],
+                [['i'], [qw/j k/], [qw/l m n/], [qw/o p/]],
+            ) ], [
+                [qw/a i/],
+                [qw/c d j k/],
+                [qw/e f g l m n/],
+                [qw/o p/],
+            ], 'Combine each listref arg with each other');
+        };
+        subtest '_atom_aggregator() -- word mode' => sub {
+            my $matcher = eval { _atom_aggregator(@{ atom('x') }) };
+            is("$@", '', 'Error message') or diag("Error: $@");
+            is(ref($matcher), 'CODE', 'Return coderef');
+            is_deeply([ $matcher->('x') ], [[[0,1]]], "Match whole word");
+            is_deeply([ $matcher->('', 'x') ], [[], [[0,1]]], "Match in second field");
+            is_deeply([ $matcher->('x x') ], [[[0,1], [2,3]]], 'Match multiple words in same field');
+            is_deeply([ $matcher->('xx') ], [], "Don't match part of word");
+            is_deeply([ $matcher->('') ], [], "Don't match empty string");
+        };
+        subtest '_atom_aggregator() -- field mode' => sub {
+            my $matcher = eval { _atom_aggregator(@{ atom('x', field => 1) }) };
+            is(ref($matcher), 'CODE', 'Return coderef');
+            is("$@", '', 'Error message') or diag("Error: $@");
+            is_deeply([ $matcher->('x') ], [[[0,1]]], "Match whole field");
+            is_deeply([ $matcher->('', 'x') ], [[], [[0,1]]], "Match in second field");
+            is_deeply([ $matcher->('x x') ], [], "Don't match part of field");
+            is_deeply([ $matcher->('xx') ], [], "Don't match part of word");
+            is_deeply([ $matcher->('') ], [], "Don't match empty string");
+        };
+        subtest '_atom_aggregator() -- negated' => sub {
+            my $matcher = eval { _atom_aggregator(@{ atom('x', not => 1) }) };
+            is(ref($matcher), 'CODE', 'Return coderef');
+            is("$@", '', 'Error message') or diag("Error: $@");
+            is_deeply([ $matcher->('x') ], [], "Don't match a whole field");
+            is_deeply([ $matcher->('', 'x') ], [], "Don't match if in second field");
+            is_deeply([ $matcher->('x x') ], [], 'Match multiple words in same field');
+            is_deeply([ $matcher->('xx') ], [[]], "Don't match as part of a word");
+            is_deeply([ $matcher->('') ], [[]], "Match empty string");
+        };
+        subtest '_and_aggregator()' => sub {
+            note('Allowed callback return values');
+            dies_with(
+                sub { _and_aggregator(undef, sub { 'a' })->() },
+                q{Can't use string ("a") as an ARRAY ref},
+                'Callback may not return string');
+            is_deeply(
+               [ _and_aggregator(
+                    undef,
+                    sub { ['a'] }
+                )->() ], [['a']],
+                'Callbacks may return single listref');
+            is_deeply(
+                [ _and_aggregator(
+                    undef,
+                    sub { (['1a'], ['2b']        ) },
+                    sub { (['1c',   '1d']        ) },
+                    sub { ([    ], ['2e']        ) },
+                    sub { ([    ], [    ], ['3f']) },
+                )->() ],
+                [['1a', '1c', '1d'], ['2b', '2e'], ['3f']],
+                'Callbacks may return multiple listrefs, which are combined');
+            is_deeply([ _and_aggregator(undef)->() ],
+                      [], 'No callbacks set up = return falsy');
+            is_deeply([ _and_aggregator(undef, sub { [] })->() ],
+                      [[]], 'Single truthy');
+            is_deeply([ _and_aggregator(undef, sub { () })->() ],
+                      [], 'Single falsy');
+            note('Test Boolean functions');
+            is_deeply([ _and_aggregator(undef, sub { () }, sub { () })->() ],
+                      [], 'Two falsy = falsy');
+            is_deeply([ _and_aggregator(undef, sub { () }, sub { [] })->() ],
+                      [], 'Falsy + truthy = falsy');
+            is_deeply([ _and_aggregator(undef, sub { [] }, sub { () })->() ],
+                      [], 'Truthy + falsy = falsy');
+            is_deeply([ _and_aggregator(undef, sub { [] }, sub { [] })->() ],
+                      [[]], 'Two truthy = truthy');
+            note('Test that input is passed to (invoked) callbacks');
+            my ($x, $y, $z);
+            is_deeply(
+                [ _and_aggregator(
+                    undef,
+                    sub { $x = \@_; (['a']) },
+                    sub { $y = \@_; ()      }, # returns false
+                    sub { $z = \@_; (['b']) }, #   thus this func won't run
+                )->(qw/a b/) ],
+                [], 'Return value');
+            is_deeply($x, [qw/a b/], '1st callback get args');
+            is_deeply($y, [qw/a b/], '2nd callback get args');
+            is_deeply($z, undef,
+                      "3rd callback short-circuited, don't get args");
+        };
+        subtest '_or_aggregator()' => sub {
+            note('Allowed callback return values');
+            dies_with(
+                sub { _or_aggregator(undef, sub { 'a' })->() },
+                q{Can't use string ("a") as an ARRAY ref},
+                'Callback may not return string');
+            is_deeply(
+               [ _or_aggregator(
+                    undef,
+                    sub { ['a'] }
+                )->() ], [['a']],
+                'Callbacks may return single listref');
+            is_deeply(
+                [ _or_aggregator(
+                    undef,
+                    sub { (['1a'], ['2b']        ) },
+                    sub { (['1c',   '1d']        ) },
+                    sub { ([    ], ['2e']        ) },
+                    sub { ([    ], [    ], ['3f']) },
+                )->() ],
+                [['1a', '1c', '1d'], ['2b', '2e'], ['3f']],
+                'Callbacks may return multiple listrefs, which are combined');
+            is_deeply([ _or_aggregator(undef)->() ],
+                      [], 'No callbacks set up = return falsy');
+            is_deeply([ _or_aggregator(undef, sub { [] })->() ],
+                      [[]], 'Single truthy');
+            is_deeply([ _or_aggregator(undef, sub { () })->() ],
+                      [], 'Single falsy');
+            note('Test Boolean functions');
+            is_deeply([ _or_aggregator(undef, sub { () }, sub { () })->() ],
+                      [], 'Two falsy = falsy');
+            is_deeply([ _or_aggregator(undef, sub { () }, sub { [] })->() ],
+                      [[]], 'Falsy + truthy = truthy');
+            is_deeply([ _or_aggregator(undef, sub { [] }, sub { () })->() ],
+                      [[]], 'Truthy + falsy = truthy');
+            is_deeply([ _or_aggregator(undef, sub { [] }, sub { [] })->() ],
+                      [[]], 'Two truthy = truthy');
+            note('Test that input is passed to (invoked) callbacks');
+            my ($x, $y, $z);
+            is_deeply(
+                [ _or_aggregator(
+                    undef,
+                    sub { $x = \@_; () },
+                    sub { $y = \@_; (['a']) }, # returns true
+                    sub { $z = \@_; () },      #   but this func runs anyway
+                )->(qw/a b/) ],
+                [['a']], 'Return value');
+            is_deeply($x, [qw/a b/], '1st callback get args');
+            is_deeply($y, [qw/a b/], '2nd callback get args');
+            is_deeply($z, [qw/a b/],
+                      "3rd callback short-circuited, don't get args");
         };
         subtest 'QUERY BASICS' => sub {
             query_is(''      => or());
@@ -693,8 +1094,7 @@ sub record {
                 query_is('=(a,=b)' => or(field(atom('a')), atom('b')), 'means «=a,b»');
             };
         };
-
-        diag("SLOPPY QUERY TESTS\n",
+        note("SLOPPY QUERY TESTS\n",
              '(from https://zrajm.org/teckentranskription/lexicon-tests.html)');
         subtest '1. Simplest tests' => sub {
             query_is('a'      => atom('a'),                      '1.1');
@@ -898,24 +1298,25 @@ $pager_pid = open(STDOUT, '|-', $opt{pager})   # send all STDOUT through pager
 # If there are multiple queries, the were gotten by -e and should be OR:ed.
 # FIXME: Parse each query separately (to resolve unfinished parens etc) then join.
 # (Make Query() accept multiple args, and OR them together.)
-my $query = new Query(simple => join(',', @query));
+my $query = new Query(($opt{color} ? 'color' : 'plain') => join(',', @query));
 my $zdb = new ZDB($opt{file});
 
 say 'QUERY: ' . new Query(dump => join(',', @query))->() if $opt{verbose};
 
 while (my ($prespace, @field) = $zdb->read_record()) {
-
-    my $matches = $query->(map { $_->{field}, $_->{value} } @field);
-
-    if ($matches) {
+    # Search fields (with text content).
+    my @mark = $query->(map { $_->{field}, $_->{value} } @field);
+    if (@mark) {
         print $prespace;
-        print(
-            ($_->{space}[0] // '')
-            . ($_->{field} // '')
-            . ($_->{space}[1] // '')
-            . ($_->{value} // '')
-            . ($_->{space}[2] // ''))
-            foreach @field;
+        foreach (@field) {
+            my ($field_highlight, $value_highlight) = splice(@mark, 0, 2);
+            print(
+                ($_->{space}[0]   // '')
+                . (highlight($_->{field}, @$field_highlight) // '') # highlight
+                . ($_->{space}[1] // '')
+                . (highlight($_->{value}, @$value_highlight) // '') # highlight
+                . ($_->{space}[2] // ''))
+        }
     }
 }
 
@@ -1513,6 +1914,14 @@ B<v0.7.30> - Command exit code was always 255, this fixes that. (2025-12-09
 B<v0.7.31> - Added options B<--no-color> and B<--no-paging> and updated
 relevant documentation. (2025-12-11 20:38--21:10)
 
+B<v0.8.0> - Added highlighting of matching strings, and also added unit tests
+for all the new functions related to this, as well unit tests for the older
+matching logic. (2025-12-08 01:20--02:16, 14:15--17:03, 17:49--18:51,
+2025-12-09 12:27--13:00, 15:09--15:29, 20:24--00:20 2025-12-10 14:27--16:29,
+17:05--19:23 2025-12-11 14:10--14:48, 16:13--17:04, 18:57--19:33, 2025-12-12
+22:01--22:24, 2025-12-13 02:39--03:07, 12:06--12:39, 12:52--13:11, 2025-12-14
+00:58--01:54, 02:19--04:01)
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1591,6 +2000,13 @@ comments that will be fixed in the future as well.)
 =over 4
 
 =item Implement match highlighting
+
+=item Make B<-C> option work
+
+=item Terminfo/termcap
+
+Should look at terminfo (or whatever is needed) to determine what highlight to
+use.
 
 =item BUG: Fix implicit leading parentheses
 
