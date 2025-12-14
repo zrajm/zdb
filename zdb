@@ -10,7 +10,7 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.1';                         # https://semver.org/
+our $VERSION='0.8.2';                         # https://semver.org/
 our $VERSION_DATE='14 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -1260,7 +1260,7 @@ while (@ARGV) {
     /^(       --help-query    )$/x and do { $out = $QUERY;              next };
     /^(-i    |--ignore-case   )$/x and do { $opt{nocase} = 1;           next };
     /^(-I    |--no-ignore-case)$/x and do { $opt{nocase} = 0;           next };
-    /^(-M    |--manual        )$/x and do { $opt{man} = 1;              next };
+    /^(-M    |--man(ual)?     )$/x and do { $opt{man} = 1;              next };
     /^        --pager  (=(.*))?$/x and do { $opt{pager} = $2//shift;    next };
     /^        --paging (=(.*))?$/x and do { $opt{paging} = whenarg($2); next };
     /^ -p                      $/x and do { $opt{paging} = 1;           next };
@@ -1443,12 +1443,14 @@ Consider case distinctions when searching. By default search is
 case-insensitive, use this option to override that. (Option inspired by
 B<grep>.)
 
-=item B<-M>, B<--manual>
+=item B<-M>, B<--man>, B<--manual>
 
-Display the B<zdb> manual page (with B<man>). The manual page is included in
-the 'binary' itself (a Perl program) in the form of Perl-style POD
-documentation. (TODO: See L</Show manpage using B<$MANPAGER>>; Option inspired
-by B<curl>.)
+Display the B<zdb> manual page (using B<man>). The manpage accessible through
+an option, (rather than using the normal B<man> command directly) since the
+manpage is embedded inside the program itself (in the form of Perl POD
+documentation), and does not exist as a separate manpage file. (TODO: See
+L</Show manpage using B<$MANPAGER>>; Option B<-M>/B<--manual> inspired by
+B<curl>, while B<--man> is inspired by the Perl tools B<ack> and B<prove>).
 
 =item B<--pager=>I<CMD> (default: B<pager>)
 
@@ -1926,6 +1928,9 @@ matching logic. (2025-12-08 01:20--02:16, 14:15--17:03, 17:49--18:51,
 B<v0.8.1> - Search now highlighting disabled now works (again). This involved
 making the _matcher() functions return true/false even in list context. Updated
 unit tests accordingly. (2025-12-14 04:01--04:15, 18:29--18:58, 19:31--20:14)
+
+B<v0.8.2> - Added option B<--man> as an alias for B<--manual>. (2025-12-14
+23:46--23:59)
 
 
 =head1 COPYRIGHT AND LICENSE
