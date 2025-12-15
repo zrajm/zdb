@@ -10,7 +10,7 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.4';                         # https://semver.org/
+our $VERSION='0.8.5';                         # https://semver.org/
 our $VERSION_DATE='15 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -1915,6 +1915,9 @@ B<v0.8.4> - Researched and added docs on how install tab completions for B<zdb>
 in B<zsh>, plus some other minor improvements to the L</FUTURE> section.
 (2025-12-15 18:14--20:10, 21:18-21:25)
 
+B<v0.8.5> - Added L</MILESTONES> to the docs & restructured the L</FUTURE>
+section somewhat. (2025-12-15 21:28--22:04)
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1989,6 +1992,33 @@ of supporting other data formats in the future.) Middle value may vary
 depending on the amount of whitespace used between the field name and value.
 
 
+=head1 MILESTONES
+
+=head2 Version 1.0
+
+B<Write to file> -- Adding fields to existing records; adding & deleting
+records. Should work in both 'filter mode' (input on STDIN, output on STDOUT)
+and as (atomic) writes to specified file. (Add new stuff at the end.)
+
+B<Case matching> -- Matching should obey case options B<--ignore-case> and
+B<--smart-case>. (Smart case being the default.)
+
+B<Fix query bugs> -- Missing leading parenthesis must work. Don't search
+comments (by default).
+
+=head2 Version 1.1
+
+B<Globbing support> -- in queries.
+
+B<%fields> in database to specify sort order, and defining allowed field value
+content.
+
+B<Undo diffs> -- Updating database (when writing file) should write the
+modifications made to disk as diffs.
+
+Moar?
+
+
 =head1 FUTURE
 
 Below are some planned future features. (Some section has separate FIXME
@@ -2004,6 +2034,10 @@ comments that will be fixed in the future as well.)
 
 When a word in a query begins/ends in a non-alphanumeric character, it
 shouldn't be expected to be at a word border (regex B<\b...\b>).
+
+=item Option to enable/disable diacritics
+
+Should make 'a' match 'ä'. (Related to/influenced by 'Field locale settings'?)
 
 =item B<BUG:> Fix implicit leading parentheses
 
@@ -2047,12 +2081,12 @@ is, an B<--ignore-case> option should only affect queries occurring after it on
 the command line---and a warning should be given to the user if one of the case
 options occur late enough to never affect a query).
 
-=item Record set matching
+=item Match record sets
 
 There should be a way to match only entries in a specified record set. Maybe
 prefix B<%rec:…>?
 
-=item Number matching
+=item Match numbers
 
 Use C<[…]> to match numbers. The brackets themselves will match a number in the
 text (a regex like C<< [+-]?(\d*\.)?\d+ >>, though that doesn't cover numbers
@@ -2061,13 +2095,20 @@ brackets will be applied as well, so that an empty bracket C<[]> matches any
 number; C<[E<lt>100]> matches any number below 100; C<[1990..2020]> will match
 a number between 1990 and 2020 (inclusive), and C<[=42]> matches the number 42.
 
-=item Date matching
+=item Match dates
 
 How to solve date matching? I would like something similar to the above number
 matching, but that allows for dates. (Internally translating stuff to epoch
 time and comparing it that way.) Ideally the date comparison should extract and
 parse date in the locale specified for the field (and be able to extract all
 kinds of date formats, from 'December 1, 2020' to '2020-12-01').
+
+=item Argument to clean up query(?)
+
+It can sometimes be hard to know how exactly B<zdb> will interpret your query.
+Using this argument should show a cleaned up version of QUERY (suppressing
+search). -- Should this also simplify Boolean logic? Or just show what the
+query looks like after the shell has stripped its quoting? Both?
 
 =back
 
@@ -2135,11 +2176,11 @@ puts selected code after C<__DATA__> block. Use that to speed things up?
 
 =back
 
-=head2 Option to enable/disable diacritics
+=head2 Database verification and format
 
-Should make 'a' match 'ä'.
+=over 4
 
-=head2 Field locale settings
+=item Field locale settings
 
 These locale settings should handle how characters match and are sorted. For
 example, in an English locale one would expect searching for 'a' to also match
@@ -2160,12 +2201,12 @@ accented character should match the corresponding unaccented one. (That is,
 decompose all characters (with C<NFD()>) and then precompose all accented
 characters from the B<%alphabet> set (with C<NFC()>).
 
-=head2 Automatic linebreaking
+=item Automatic linebreaking
 
 There should maybe be an option to produce automatic linebreaks in fields? How
 about fields containing explicit newlines? (Like an address, or poetry?)
 
-=head2 Atomic file updates
+=item Atomic file updates
 
 Currently data is always output to standard output, regardless of whether it
 was read from standard input, or from file specified on the command line. In
@@ -2175,19 +2216,25 @@ inserting or deleting fields/records. A tempfile will be written next to the
 input file (for example, with the name 'I<FILE>B<.tmp>'). Then, if the
 modification is successful the file will be is renamed to replace the old file.
 
-=head2 Inserting new records
+=item Inserting new records
 
 When I<FIELD>B<=>I<VALUE> pairs arguments are given, but no I<QUERY> is present
 on the command line, the data should be inserted as a new record in the
 database.
 
-=head2 Inserting fields into existing records
+=item Inserting fields into existing records
 
 When I<FIELD>B<=>I<VALUE> pairs arguments are given, and a I<QUERY> is present
 on the command line, the data should be inserted into the first(?) matching
 record.
 
-=head2 Record and field sorting
+=item Add record sets B<%rec> (and B<%doc>)
+
+Implement B<recutils> 'record set' field B<%rec>. Record set name should
+probably use the same limitations (and recommendations) as B<recutils> do (see
+'Naming Record Types' in the B<recutils> manual).
+
+=item Record and field sorting
 
 Sorting, being a slow operation, should never be performed on the whole
 dictionary unless explicitly requested. (Using a B<--sort> option, perhaps?)
@@ -2206,14 +2253,7 @@ interleaved fields of different names, the internal order between fields of the
 same name should be retained (but the different field names should no longer be
 interleaved) after sorting.
 
-=head2 Argument to clean up query
-
-It can sometimes be hard to know how exactly B<zdb> will interpret your query.
-Using this argument should show a cleaned up version of QUERY (suppressing
-search). -- Should this also simplify Boolean logic? Or just show what the
-query looks like after the shell has stripped its quoting? Both?
-
-=head2 Field types and field verification
+=item Field types and field verification
 
 B<recutils> uses B<%type> and B<%typedef> for this purpose. Also the fields
 B<%mandatory>, B<%allowed>, B<%prohibit>, B<%unique> and B<%constraint>. In
@@ -2223,12 +2263,18 @@ one to make breaking changes. But verification of whole database might be too
 slow to perform for each modification. (Maybe add B<--verify> option or
 similar for checking the whole database?)
 
-=head2 Suppression of length output
+=back
+
+=head2 Command behavior
+
+=over 4
+
+=item Suppression of lengthy output
 
 It would be convenient to be able to suppress lengthy output and/or disable
 pager for short output (shorter than a screenful?).
 
-=head2 Show manpage using B<$MANPAGER>
+=item Show manpage using B<$MANPAGER>
 
 The B<--manual> option should use the B<$MANPAGER> environment variable to
 determine how to display its manpage. Currently B<man -l -> is used to display
@@ -2236,13 +2282,13 @@ the manpage, but to allow for B<$MANPAGER> the manpage should be written to
 tempfile and the manpager should be invoked as C<$MANPAGE FILE> (where I<FILE>
 is a path beginning with '.' or '/').
 
-=head2 Add record sets B<%rec> (and B<%doc>)
+=item Add B<+> option
 
-Implement B<recutils> 'record set' field B<%rec>. Record set name should
-probably use the same limitations (and recommendations) as B<recutils> do (see
-'Naming Record Types' in the B<recutils> manual).
+This option is passed on to the pager. This can be used with the B<--man>
+option to immediately go to a specified section (for example using
+C<B<+'/FUTURE'>>) but can also be used in ordinary searches.
 
-=head2 No QUERY = Show database status
+=item No QUERY = Show database status
 
 Giving an input file, but no I<QUERY> or I<FIELD>B<=>I<VALUE> pairs should give
 a summary of the input file. Summary should include B<%rec> and B<%doc> fields
@@ -2265,6 +2311,8 @@ Also update usage to show that QUERY argument is optional! (Meaning that we
 also only need one usage line instead of two.)
 
     zdb [OPTION]... [--] [QUERY] [FIELD=VALUE]... [FILE]
+
+=back
 
 =head2 File locking
 
