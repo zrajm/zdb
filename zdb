@@ -10,7 +10,7 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.3';                         # https://semver.org/
+our $VERSION='0.8.4';                         # https://semver.org/
 our $VERSION_DATE='15 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -19,7 +19,7 @@ Usage: $PROGRAM [OPTION]... [--] QUERY [FIELD=VALUE]... [FILE]
        $PROGRAM [OPTION]... -eQUERY... [--] [FIELD=VALUE]... [FILE]
 Manipulate ZDB database.
 
-      --color[=WHEN]      When to highlight matches (default: 'auto')
+      --color[=WHEN]      When to highlight matches (default 'auto')
                           WHEN is 'auto', 'always' or 'never'
   -c, --color             Always highlight matches (same as --color=always)
   -C, --no-color          Never highlight matches (same as --color=never)
@@ -29,8 +29,8 @@ Manipulate ZDB database.
   -i, --ignore-case       Ignore case when searching (default)
   -I, --no-ignore-case    Don't ignore case when searching
   -M, --manual            Show zdb manual page (with 'man')
-      --pager=CMD         Use CMD as pager (default: 'pager')
-      --paging[=WHEN]     When to use pager (default: 'auto')
+      --pager=CMD         Use CMD as pager (default 'pager')
+      --paging[=WHEN]     When to use pager (default 'auto')
   -p, --paging            Always use pager (same as --paging=always)
   -P, --no-paging         Never use pager (same as --paging=never)
       --test              Run built-in unit tests
@@ -1323,7 +1323,7 @@ I<FIELD>B<=>I<VALUE> arguments were provided or not):
 
 =over 7
 
-=item B<--color>[B<=>I<WHEN>], B<--colour>[B<=>I<WHEN>] (default: B<auto>)
+=item B<--color>[B<=>I<WHEN>], B<--colour>[B<=>I<WHEN>] (default B<auto>)
 
 When to highlight search matches in the output.
 
@@ -1398,7 +1398,7 @@ documentation), and does not exist as a separate manpage file. (TODO: See
 L</Show manpage using B<$MANPAGER>>; Option B<-M>/B<--manual> inspired by
 B<curl>, while B<--man> is inspired by the Perl tools B<ack> and B<prove>).
 
-=item B<--pager=>I<CMD> (default: B<pager>)
+=item B<--pager=>I<CMD> (default B<pager>)
 
 Specify a which command to use as a pager. (A pager is a program like B<more>
 or B<less> which allows you to navigate through large output in a more
@@ -1418,7 +1418,7 @@ B<-F> (exit immediately if output fits on screen), B<-X> (disable screen
 clearing on exit on some terminals), and B<-i> (turn off case-insensitivity
 when searching in B<less>).
 
-=item B<--paging>[B<=>I<WHEN>] (default: B<auto>)
+=item B<--paging>[B<=>I<WHEN>] (default B<auto>)
 
 When to use a pager for the output.
 
@@ -1583,6 +1583,35 @@ with the standard Perl installation, but the documentation can also be found
 inside the B<zdb> source code itself (and is fairly readable).
 
 =back
+
+
+=head1 TAB COMPLETION
+
+This is how to set up tab completion for B<zdb>. I've only listed how to do it
+for B<zsh> since that's the shell I'm using. Feel free to contribute
+suggestions for other shells!
+
+=head2 Tab completion for Zsh
+
+To get autocompletion of B<zdb> options in B<zsh>, create a file called F<_zdb>
+(with an initial '_'!) in the whatever directory your instance of B<zsh> keeps
+its autocompletion functions.
+
+    #compdef zdb
+    _arguments \
+      '--color=[When to use colors]:WHEN:(always auto never)' \
+      '--paging=[When to use paging]:WHEN:(always auto never)' \
+      '*: :_gnu_generic'
+
+This directory will be one of the directories in the B<$FPATH> environment
+variable, to list them all in an easily readable fashion, use:
+
+    echo ${(F)fpath}
+
+This autocompletion function should actually allow any arbitrary command (with
+options) to be entered as an argument for B<--pager>, and I should also like a
+little query language cheatsheet to be displayed when tab is pressed in a query
+position (that is, as the first arg, or as an argument to B<--e>/B<--match>.
 
 
 =head1 EXAMPLES
@@ -1882,6 +1911,10 @@ B<v0.8.2> - Added option B<--man> as an alias for B<--manual>. (2025-12-14
 
 B<v0.8.3> - Updated docs. (2025-12-15 00:01--02:56)
 
+B<v0.8.4> - Researched and added docs on how install tab completions for B<zdb>
+in B<zsh>, plus some other minor improvements to the L</FUTURE> section.
+(2025-12-15 18:14--20:10, 21:18-21:25)
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1961,7 +1994,7 @@ depending on the amount of whitespace used between the field name and value.
 Below are some planned future features. (Some section has separate FIXME
 comments that will be fixed in the future as well.)
 
-=head2 Query Improvements
+=head2 Query improvements
 
 =over 4
 
@@ -1990,12 +2023,15 @@ searched.
 
 =item Smart case matching
 
-B<ack>, B<ucg> (UniversalCodeGrep) and B<ag> (The Silver Searcher) have a
-B<--smart-case> option (B<ack> and B<ag> also has shortopt B<-S> for
-B<--smart-case>, while B<ucg> doesn't have a shortopt). B<ag> describes it as:
-"Match case-sensitively if there are any uppercase letters in PATTERN,
-case-insensitively otherwise. Enabled by default." And B<ucg> describes it as:
-"Ignore case if PATTERN is all lowercase (default: enabled)."
+When implemented, smart case matching shall be the default.
+
+B<ack>, B<ag> (The Silver Searcher), B<rg> (ripgrep) and B<ucg>
+(UniversalCodeGrep) have a B<--smart-case> option (B<ack>, B<ag>, B<rg> also
+has shortopt B<-S> for B<--smart-case>, while B<ucg> doesn't have a shortopt).
+B<ag> describes it as: "Match case-sensitively if there are any uppercase
+letters in PATTERN, case-insensitively otherwise. Enabled by default." And
+B<ucg> describes it as: "Ignore case if PATTERN is all lowercase (default:
+enabled)."
 
 B<less> has the B<-i>/B<--ignore-case> option with the same function: "Causes
 searches to ignore case; that is, uppercase and lowercase are considered
@@ -2046,6 +2082,12 @@ kinds of date formats, from 'December 1, 2020' to '2020-12-01').
 Should look at terminfo (or whatever is needed) to determine what highlight to
 use.
 
+=item Implement B<$NO_COLOR>
+
+If B<$NO_COLOR> environment variable is set, disable colors by default. After
+implementing this, also submit a pull request to this project
+L<https://no-color.org/>.
+
 =item Highlight color config
 
 User should be able to choose highlight color. (Should we maybe take colors
@@ -2067,7 +2109,7 @@ Maybe B<delta> uses the option B<--navigate> to: "Activate diff navigation. Use
 
 =back
 
-=head2 Improve unit testing
+=head2 Unit tests
 
 =over 4
 
