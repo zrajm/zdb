@@ -10,8 +10,8 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.2';                         # https://semver.org/
-our $VERSION_DATE='14 December 2025';
+our $VERSION='0.8.3';                         # https://semver.org/
+our $VERSION_DATE='15 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -42,24 +42,26 @@ pairs are given (with no QUERY), create new record containing those fields; if
 QUERY is given, add the fields to the first matching record.
 
 ZDB always make minimal changes to files. Comments and whitespace are
-preserved, and resorting is only done on request.
+preserved, and re-sorting is only done on request.
 
 NOTE: QUERY cannot start with '-', unless preceded by '--' option. Putting a
 space (or comma) at the beginning of the QUERY argument also works.
 USAGE_END
 our $QUERY = <<"QUERY_END";
-NOTE: QUERY cannot start with '-', unless preceded by '--' option. Prefixing
-query with space (or comma) also works.
+NOTE: QUERY will be taken for an option if starts with '-'. To avoid, prefix it
+with a character that doesn't change the meaning of the query (e.g. comma ','),
+or precede the QUERY argument with the option terminator ('--').
 
 Special characters (in order of precedence)
--------------------------------------
-  \e[1m[...]\e[m      Field index
-  \e[1m:\e[m (colon)  Field name delimiter
-  \e[1m-\e[m (minus)  NOT
-  \e[1m␣\e[m (space)  AND
-  \e[1m,\e[m (comma)  OR
-  \e[1m(...)\e[m      Grouping
+-------------------------------------------
+  \e[1m=\e[m   (equal)  match whole field
+  \e[1m-\e[m   (minus)  logical NOT
+  \e[1m␣\e[m   (space)  logical AND
+  \e[1m,\e[m   (comma)  logical OR
+  \e[1m(\e[m…\e[1m)\e[m (parens) grouping
 
+EXAMPLES
+========
 * \e[1mname:\e[m = Find records with field called 'name'.
 * \e[1m-name:\e[m = \e[1m-(name:)\e[m = Find records without field 'name'.
 * \e[1mname:emma\e[m = \e[1m(name: && name:emma)\e[m = Find records where field 'name' exists
@@ -71,62 +73,6 @@ Special characters (in order of precedence)
 
 * \e[1m(-name):emma\e[m = \e[1m(-name: && name:emma)\e[m = NONSENSE. Find records without field
   'name', but where field name contains 'emma'.
-
-QUERY_END
-our $QUERY2 = <<"QUERY_END";
-
-* \e[1mname:emma\e[m = match records which have field called 'name',
-  containing word 'emma'.
-
-\e[1m-name:emma\e[m = \e[1m-(name:emma)\e[m = match records where
-\e[1m-name:emma\e[m = \e[1m-(name:emma)\e[m = match records where
-
-FIELD,FIELD2:VALUE1 VALUE2
-
-FIELD[INDEX]:       --- FIELD must exist
-FIELD[INDEX]:EXPR   --- must match EXPR
-EXPR                --- EXPR must match some field
-
-'name,alias:lars emma' = name,((alias:lars) emma)
-  * find records containing either word 'name'
-  * OR records containing an 'alias' field with the word 'lars', and any
-    field with the word 'emma'
-
-'name,alias:lars emma' = ((name,alias):(lars emma))
-
-'name,alias:lars' 'emma' = ((name,alias):lars) emma
-
-'name,alias:lars,emma' = ((name,alias):(lars,emma))
-
-'name,alias:lars' , 'emma' = ((name,alias):lars),emma <-- REALLY?
-
-or
-   and  and and
-             or  or
-[  [],  [], [[], []]]
-
-#['or', QUERY...]
-#['and', QUERY...]
-['not', QUERY...]
-
-[qr//, qr//]   # matcher
-
--(field:thingy)
-
-field:(-thingy, other)
-
-Boolean precedence:
-
-
-Meaning that: NOT -> AND -> OR (`a, -b c` = `a, (-b c)`).
-
-tlh:(tlha tlhup)
-
-(en sv):(bok,book)
-
-(en sv):(bok,tlh:book)
-
-# Option to enable/disable diacritics (without 'a' would match 'ä')
 QUERY_END
 
 my %opt;
@@ -1535,21 +1481,23 @@ Queries are case-insensitive (unless you use B<--no-ignore-case>).
 
 =head2 Logic Operators
 
-Boolean operators are also supported:
+The following operators are also supported:
 
-    ┌──────────────┬────────────┐
-    │  Character   │  Used For  │  From the most tightly binding, to the
-    ├──────────────┼────────────┤  least binding.
-    │  :  (colon)  │  prefix    │
-    ├──────────────┼────────────┤  Thus: '-a:b, -c d' = '(-(a:b)), (-c d)'.
-    │  -  (minus)  │  not       │
-    ├──────────────┼────────────┤
-    │  ␣  (space)  │  and       │
-    ├──────────────┼────────────┤
-    │  ,  (comma)  │  or        │
-    ├──────────────┼────────────┤  ¹ Any missing parentheses are automatically
-    │ (…) (parens) │  grouping¹ │    added at start/end of QUERY.
-    └──────────────┴────────────┘
+    ┌──────────────┬──────────────┐
+    │  Character   │  Used For    │  From the most tightly binding, to the
+    ├──────────────┼──────────────┤  least binding.
+    │  :  (colon)  │  prefix      │
+    ├──────────────┼──────────────┤  Thus: '-a:b, -c d' = '(-(a:b)), (-c d)'.
+    │  =  (equal)  │  whole field │
+    ├──────────────┼──────────────┤
+    │  -  (minus)  │  not         │
+    ├──────────────┼──────────────┤
+    │  ␣  (space)  │  and         │
+    ├──────────────┼──────────────┤
+    │  ,  (comma)  │  or          │
+    ├──────────────┼──────────────┤  ¹ Any missing parentheses are automati-
+    │ (…) (parens) │  grouping¹   │    cally added at start/end of QUERY.
+    └──────────────┴──────────────┘
 
 
 =head2 Field Prefixes
@@ -1932,6 +1880,8 @@ unit tests accordingly. (2025-12-14 04:01--04:15, 18:29--18:58, 19:31--20:14)
 B<v0.8.2> - Added option B<--man> as an alias for B<--manual>. (2025-12-14
 23:46--23:59)
 
+B<v0.8.3> - Updated docs. (2025-12-15 00:01--02:56)
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1962,22 +1912,28 @@ Hence, this little project! :)
 
 =head2 Internal Query Format
 
-Query consists of terms. A term can be either a parenthesis or an atom. A
-parenthesis (with type C<and> or C<or>) implements a Boolean operator, while an
-atom (with the type C<atom>) is a record matching function.
+The inputted query (or queries, if multiple B<-e>/B<--match=>I<QUERY> options
+are given) are parsed, normalized and compiled.
 
-Both parentheses and atoms have the additional properties C<not> and C<field>,
-which are used to represent the query prefixes C<B<->> (negation) and C<B<=>>
-(exact field matching). However, before searching, the query is normalized
-which means pushing the properties out to query leaf nodes.
+During query parsing a query expression given on the command line is turned
+into a tree structure. Search words/phrases correspond to the leaf nodes in
+this tree and are called atoms (that's where the actual string matching is
+done) and parenthesis in the query correspond to the intermediate nodes (which
+have a type of either AND or OR). The query parser also adds additional
+intermediate nodes, where needed to resolve Boolean operator precedence.
 
-The inputted query (or queries, if using multiple B<-e>/B<--match=>I<QUERY>
-options are given) are parsed, normalized and compiled. Parsing means
-converting the argument given by the user from text into query tree.
-Normalization performs certain operation on this tree (such as rewriting the
-query into Negation Normal Form). And finally compilation converts query tree
-into a function, which (when invoked with a database record as input) can
-determine whether that record matches the query or not.
+After parsing the query, the resulting query tree is normalized. This turns the
+query into Negation Normal Form, by moving any use of negation (C<->), and
+exact field match (C<=>) prefixes out into the leaf nodes of the query. These
+operations are thus only performed once during a search. (That is, search
+query like C<-(-x y)> is internally turned into C<(x,-y)> before matching is
+attempted).---This is allows doubly negated terms to be highlighted in the
+search result, and simplifies traversal of the intermediate nodes.
+
+Finally the query is compiled into a function which, when passed the contents
+of a database record, determines whether that particular record matches the
+query or not. (When match highlighting is enabled, it also returns the
+character offsets used for the highlighting.)
 
 
 =head2 Internal Database Representation
@@ -2005,18 +1961,18 @@ depending on the amount of whitespace used between the field name and value.
 Below are some planned future features. (Some section has separate FIXME
 comments that will be fixed in the future as well.)
 
-=head2 Read QUERY arguments
+=head2 Query Improvements
 
 =over 4
 
-=item Add unit test for highlight()
+=item Add support for globs in query
 
-=item Terminfo/termcap
+=item Better word border detection
 
-Should look at terminfo (or whatever is needed) to determine what highlight to
-use.
+When a word in a query begins/ends in a non-alphanumeric character, it
+shouldn't be expected to be at a word border (regex B<\b...\b>).
 
-=item BUG: Fix implicit leading parentheses
+=item B<BUG:> Fix implicit leading parentheses
 
 Applies mostly to missing B<(> at beginning of query string, but also (to lesser
 degree) to missing B<)> at the end.---See failing unit tests.
@@ -2024,16 +1980,92 @@ degree) to missing B<)> at the end.---See failing unit tests.
 =item Unwrap parentheses with same AND/OR as parent
 
 Nice-to-have, but not really B<important> in any way (if implemented queries
-will become faster.)
+will become very slightly faster, outputted cleaned up queries will look
+prettier.)
 
-=item Update L</INTERNALS> for query format
-
-=back
-
-=head2 Search in comments
+=item Don't search comments by default
 
 Option to enable/disable searching comments. By default comments should not be
 searched.
+
+=item Smart case matching
+
+B<ack>, B<ucg> (UniversalCodeGrep) and B<ag> (The Silver Searcher) have a
+B<--smart-case> option (B<ack> and B<ag> also has shortopt B<-S> for
+B<--smart-case>, while B<ucg> doesn't have a shortopt). B<ag> describes it as:
+"Match case-sensitively if there are any uppercase letters in PATTERN,
+case-insensitively otherwise. Enabled by default." And B<ucg> describes it as:
+"Ignore case if PATTERN is all lowercase (default: enabled)."
+
+B<less> has the B<-i>/B<--ignore-case> option with the same function: "Causes
+searches to ignore case; that is, uppercase and lowercase are considered
+identical. This option is ignored if any uppercase letters appear in the search
+pattern; in other words, if a pattern contains uppercase letters, then that
+search does not ignore case."
+
+Add b<-s>/B<--smart-case> and b<-S>/B<--no-smart-case>. This option should
+override (and be overridden by) B<--ignore-case> and B<--no-ignore-case>. Query
+arguments (either using B<-e>/B<--match=>I<QUERY>, or plain I<QUERY>) should
+use whatever option was in effect when the I<QUERY> argument was parsed. (That
+is, an B<--ignore-case> option should only affect queries occurring after it on
+the command line---and a warning should be given to the user if one of the case
+options occur late enough to never affect a query).
+
+=item Record set matching
+
+There should be a way to match only entries in a specified record set. Maybe
+prefix B<%rec:…>?
+
+=item Number matching
+
+Use C<[…]> to match numbers. The brackets themselves will match a number in the
+text (a regex like C<< [+-]?(\d*\.)?\d+ >>, though that doesn't cover numbers
+in scientific notation). After matching the mathematical expression inside the
+brackets will be applied as well, so that an empty bracket C<[]> matches any
+number; C<[E<lt>100]> matches any number below 100; C<[1990..2020]> will match
+a number between 1990 and 2020 (inclusive), and C<[=42]> matches the number 42.
+
+=item Date matching
+
+How to solve date matching? I would like something similar to the above number
+matching, but that allows for dates. (Internally translating stuff to epoch
+time and comparing it that way.) Ideally the date comparison should extract and
+parse date in the locale specified for the field (and be able to extract all
+kinds of date formats, from 'December 1, 2020' to '2020-12-01').
+
+=back
+
+=head2 Highlighting
+
+=over 4
+
+=item Add unit tests for highlight()
+
+=item Terminfo/termcap
+
+Should look at terminfo (or whatever is needed) to determine what highlight to
+use.
+
+=item Highlight color config
+
+User should be able to choose highlight color. (Should we maybe take colors
+from B<$GREP_COLORS> environment variable? And make it possible to override
+with our own B<ZDBCOLORS>?)
+
+=item Option to user pager's highlighting
+
+Add option to, instead of highlighting the output, use pager options for the
+highlighting. When using B<less> as a pager, for example, this would involve
+invoking it with the B<--use-backslash> and B<+/>I<REGEX> options.
+
+This would have the drawback that overlapping searches would not be marked, but
+the benefit that the user would be able to easily navigate back and forth
+between the matches inside the pager.
+
+Maybe B<delta> uses the option B<--navigate> to: "Activate diff navigation. Use
+'n' to jump forwards and 'N' to jump backwards."
+
+=back
 
 =head2 Improve unit testing
 
@@ -2061,46 +2093,9 @@ puts selected code after C<__DATA__> block. Use that to speed things up?
 
 =back
 
-=head2 Smart case matching
+=head2 Option to enable/disable diacritics
 
-B<ucg> (UniversalCodeGrep) and B<ag> (The Silver Searcher) both have a
-B<--smart-case> option (B<ag> also has shortopt B<-S>, while B<ucg> doesn't
-have a shortopt). B<ag> describes it as: "Match case-sensitively if there are
-any uppercase letters in PATTERN, case-insensitively otherwise. Enabled by
-default." And B<ucg> describes it as: "Ignore case if PATTERN is all lowercase
-(default: enabled)."
-
-B<less> has the B<-i>/B<--ignore-case> option with the same function: "Causes
-searches to ignore case; that is, uppercase and lowercase are considered
-identical. This option is ignored if any uppercase letters appear in the search
-pattern; in other words, if a pattern contains uppercase letters, then that
-search does not ignore case."
-
-Maybe add b<-s>/B<--smart-case> and b<-S>/B<--no-smart-case>. This option
-should override (and be overridden by) B<--ignore-case> and
-B<--no-ignore-case>.
-
-=head2 Record set matching
-
-There should be a way to match only entries in a specified record set. Maybe
-prefix B<%rec:…>?
-
-=head2 Number matching
-
-Use C<[…]> to match numbers. The brackets themselves will match a number in the
-text (a regex like C<< [+-]?(\d*\.)?\d+ >>, though that doesn't cover numbers
-in scientific notation). After matching the mathematical expression inside the
-brackets will be applied as well, so that an empty bracket C<[]> matches any
-number; C<[E<lt>100]> matches any number below 100; C<[1990..2020]> will match
-a number between 1990 and 2020 (inclusive), and C<[=42]> matches the number 42.
-
-=head2 Date matching
-
-How to solve date matching? I would like something similar to the above number
-matching, but that allows for dates. (Internally translating stuff to epoch
-time and comparing it that way.) Ideally the date comparison should extract and
-parse date in the locale specified for the field (and be able to extract all
-kinds of date formats, from 'December 1, 2020' to '2020-12-01').
+Should make 'a' match 'ä'.
 
 =head2 Field locale settings
 
@@ -2122,19 +2117,6 @@ should be treated as different from the other characters, while any other
 accented character should match the corresponding unaccented one. (That is,
 decompose all characters (with C<NFD()>) and then precompose all accented
 characters from the B<%alphabet> set (with C<NFC()>).
-
-=head2 Option to user pager's highlighting
-
-Add option to, instead of highlighting the output, use pager options for the
-highlighting. When using B<less> as a pager, for example, this would involve
-invoking it with the B<--use-backslash> and B<+/>I<REGEX> options.
-
-This would have the drawback that overlapping searches would not be marked, but
-the benefit that the user would be able to easily navigate back and forth
-between the matches inside the pager.
-
-Maybe B<delta> uses the option B<--navigate> to: "Activate diff navigation. Use
-'n' to jump forwards and 'N' to jump backwards."
 
 =head2 Automatic linebreaking
 
@@ -2247,12 +2229,6 @@ also only need one usage line instead of two.)
 There should be some protection to avoid having multiple instances of B<zdb>
 trying to modify the same file at the same time.
 
-=head2 Highlight color config
-
-User should be able to choose highlight color. (Should we maybe take colors
-from B<$GREP_COLORS> environment variable? And make it possible to override
-with our own B<ZDBCOLORS>?)
-
 =head2 Undo
 
 As a database is updated, patches should be generated and saved into a
@@ -2275,7 +2251,7 @@ encoding. (Encode with C<basenc --z85>, decode with C<basenc --z85 -d>.)
 
 =over 12
 
-=item Compress
+=item Compress:
 
 C<< | xz -c | basenc  --z85 >>
 
