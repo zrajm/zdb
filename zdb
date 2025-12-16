@@ -10,8 +10,8 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.5';                         # https://semver.org/
-our $VERSION_DATE='15 December 2025';
+our $VERSION='0.8.6';                         # https://semver.org/
+our $VERSION_DATE='16 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -224,11 +224,8 @@ sub highlight {
         # FIXME: Handling of comments?
         my @record; #      1    2       [3]         [4]    5
         while ($txt =~ m/\G(\n*)(.*?)(?:($FIELD_SEP)(.*?))?($FIELD_END)/gcs) {
-            push(@record, {
-                field => $2,
-                value => $4 // '',
-                space => [$1, $3 // '', $5],
-            });
+            # (field name, field value, pre-space, separator space, post-space)
+            push(@record, [$2, $4 // '', $1, $3 // '', $5]);
         }
         return ($spc, @record);
     }
@@ -1180,11 +1177,12 @@ local %SIG = (
             $tip ? "Try '$PROGRAM --help' for more information.\n" : ());
     });
 
-my $out;
-my (@arg, @query);
+my (@arg, @query, @to_write);
 %opt = (
     color  => -t STDOUT,
     file   => undef,
+    info   => '',
+    update => '',
     man    => '',
     nocase => 1,
     pager  => $ENV{PAGER} // $ENV{ZDBPAGER} // 'pager',
@@ -1202,8 +1200,8 @@ while (@ARGV) {
     /^(-C    |--no-colou?r    )$/x and do { $opt{color} = 0;            next };
     /^        --colou?r(=(.*))?$/x and do { $opt{color} = whenarg($2);  next };
     /^(-e(.*)|--match (=(.*))?)$/x and do { push @query, $2||$4//shift; next };
-    /^(-h    |--help          )$/x and do { $out = $USAGE;              next };
-    /^(       --help-query    )$/x and do { $out = $QUERY;              next };
+    /^(-h    |--help          )$/x and do { $opt{info} = $USAGE;        next };
+    /^(       --help-query    )$/x and do { $opt{info} = $QUERY;        next };
     /^(-i    |--ignore-case   )$/x and do { $opt{nocase} = 1;           next };
     /^(-I    |--no-ignore-case)$/x and do { $opt{nocase} = 0;           next };
     /^(-M    |--man(ual)?     )$/x and do { $opt{man} = 1;              next };
@@ -1213,14 +1211,15 @@ while (@ARGV) {
     /^(-P    |--no-paging     )$/x and do { $opt{paging} = 0;           next };
     /^(       --test          )$/x and do { $opt{test} = 1;             next };
     /^(-v    |--verbose       )$/x and do { $opt{verbose} = 1;          next };
-    /^(       --version       )$/x and do { $out = version();           next };
+    /^(       --version       )$/x and do { $opt{info} = version();     next };
     die "Unknown option '${ s/=.*//; \$_ }'.\n" if /^-./;
+    /^ [a-zA-Z%][a-zA-Z0-9]* =  /x and do { push(@to_write, $_);        next };
     push(@arg, $_);
 }
 
 $opt{man}  and manpage();
-$opt{test} and do { Query::test(); exit };
-$out       and do { print $out;    exit };
+$opt{test} and do { Query::test();    exit };
+$opt{info} and do { print $opt{info}; exit };
 die "Only one FILE may be specified.\n" if @arg > 2;
 if (-t STDIN) {                                # get FILE
     die "No FILE specified.\n"                         if @arg == 0;
@@ -1241,31 +1240,44 @@ $pager_pid = open(STDOUT, '|-', $opt{pager})   # send all STDOUT through pager
     or die "Can't exec '$opt{pager}': $!\n"    #   (if enabled)
     if $opt{paging};
 
-# If there are multiple queries, the were gotten by -e and should be OR:ed.
-# FIXME: Parse each query separately (to resolve unfinished parens etc) then join.
-# (Make Query() accept multiple args, and OR them together.)
+if (@to_write) {
+    $opt{color}  = 0;
+    $opt{update} = 1;
+}
 my $query = new Query(($opt{color} ? 'color' : 'plain') => join(',', @query));
 my $zdb = new ZDB($opt{file});
 
 say 'QUERY: ' . new Query(dump => join(',', @query))->() if $opt{verbose};
 
+my $out;
 while (my ($prespace, @field) = $zdb->read_record()) {
-    # Search fields (with text content).
-    my @mark = $query->(map { $_->{field}, $_->{value} } @field);
-    if (@mark) {
-        print $prespace;
-        foreach (@field) {
-            my ($field_highlight, $value_highlight)
-                = $opt{color} ? splice(@mark, 0, 2) : [];
-            print(
-                ($_->{space}[0]   // '')
-                . (highlight($_->{field}, @$field_highlight) // '') # highlight
-                . ($_->{space}[1] // '')
-                . (highlight($_->{value}, @$value_highlight) // '') # highlight
-                . ($_->{space}[2] // ''))
+    my @found = $query->(map @{$_}[qw/0 1/], @field); # search field name/value
+    next unless @found or $opt{update};
+
+    # Output record (possibly with highlight, possibly not).
+    $out .= $prespace;
+    while (@field) {
+        my ($field, $value, $space_beg, $space_sep, $space_end)
+            = @{shift @field};
+        if ($opt{color}) {                     # add highlights
+            $field = highlight($field, @{shift @found});
+            $value = highlight($value, @{shift @found});
+        }
+        $out .= $space_beg . $field . $space_sep . $value . $space_end;
+    }
+    # Insert new data.
+    if (@found) {
+        die "Can't insert data: QUERY may not match multiple records\n"
+            if $opt{update} and not @to_write;
+        while (@to_write) {
+            my ($field, $value) = split('=', shift(@to_write), 2);
+            $out .= "$field\t$value\n";
         }
     }
 }
+die "Can't insert data: QUERY did not match any record\n"
+    if $opt{update} and @to_write;
+print $out;
 
 __END__
 
@@ -1918,6 +1930,9 @@ in B<zsh>, plus some other minor improvements to the L</FUTURE> section.
 B<v0.8.5> - Added L</MILESTONES> to the docs & restructured the L</FUTURE>
 section somewhat. (2025-12-15 21:28--22:04)
 
+B<v0.8.6> - Added writing of new fields to a matching record. (2025-12-16
+23:36--00:03, 01:16--02:41)
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1976,20 +1991,21 @@ character offsets used for the highlighting.)
 
 In the main loop C<read_record()> is called over and over until the entire file
 has been read. (And the query is used in turn for each record to determine
-whether or not to output it.) C<read_record()> returns two values, first is a
-string containing the leading whitespace (i.e. the whitespace occurring between
-this record and the previous one), second is an array containing one hashref
-for each field in the record. The hashref has the following format:
+whether or not it matches.) C<read_record()> returns two values, the first of
+which is a string, and the second a list-of-lists. The initial string as all
+whitespace leading up to the record, and the list of list contain a listref for
+each field. The syntax for these listrefs are:
 
-    { field => ..., value => ..., space => [..., ..., ...] }
+    [FIELD, VALUE, BEG_SPACE, SEP_SPACE, END_SPACE]
 
-Where C<field> & C<value> are the name & value of the field (these are passed
-to the matcher functions when performing a query), and C<space> contains the
-whitespace coming before the field, between name and value and after the field.
-In the ZDB format the first value is always an empty string, and the last
-always a newline. (These are mostly for future proofing, and having the option
-of supporting other data formats in the future.) Middle value may vary
-depending on the amount of whitespace used between the field name and value.
+The first two being the field name and value, and the last three are all
+whitespaces, the B<BEG_SPACE> found just before B<FIELD>, B<SEP_SPACE> is the
+separator between B<FIELD> and B<VALUE>, and B<END_SPACE> comes after B<VALUE>.
+
+In the ZDB format B<BEG_SPACE> is always an empty string, and B<END_SPACE>
+always a newline. (These are mostly for future-proofing, and having the option
+of supporting other data formats in the future.) B<SEP_SPACE> may vary
+depending on the amount of whitespace found between B<FIELD> and B<VALUE>.
 
 
 =head1 MILESTONES
@@ -2221,12 +2237,6 @@ modification is successful the file will be is renamed to replace the old file.
 When I<FIELD>B<=>I<VALUE> pairs arguments are given, but no I<QUERY> is present
 on the command line, the data should be inserted as a new record in the
 database.
-
-=item Inserting fields into existing records
-
-When I<FIELD>B<=>I<VALUE> pairs arguments are given, and a I<QUERY> is present
-on the command line, the data should be inserted into the first(?) matching
-record.
 
 =item Add record sets B<%rec> (and B<%doc>)
 
