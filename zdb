@@ -10,19 +10,19 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.6';                         # https://semver.org/
+our $VERSION='0.8.7';                         # https://semver.org/
 our $VERSION_DATE='16 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
-Usage: $PROGRAM [OPTION]... [--] QUERY [FIELD=VALUE]... [FILE]
+Usage: $PROGRAM [OPTION]... [--] (QUERY|FIELD=VALUE...) [FILE]
        $PROGRAM [OPTION]... -eQUERY... [--] [FIELD=VALUE]... [FILE]
-Manipulate ZDB database.
+Search or update/add records in a ZDB text file database.
 
       --color[=WHEN]      When to highlight matches (default 'auto')
                           WHEN is 'auto', 'always' or 'never'
-  -c, --color             Always highlight matches (same as --color=always)
-  -C, --no-color          Never highlight matches (same as --color=never)
+  -c, --color             Always highlight matches (means --color=always)
+  -C, --no-color          Never highlight matches (means --color=never)
   -e, --match=QUERY       Specify QUERY explicitly (usually omitted)
   -h, --help              Show this help and exit
       --help-query        Show QUERY syntax (it's very googlish)
@@ -31,21 +31,19 @@ Manipulate ZDB database.
   -M, --manual            Show zdb manual page (with 'man')
       --pager=CMD         Use CMD as pager (default 'pager')
       --paging[=WHEN]     When to use pager (default 'auto')
-  -p, --paging            Always use pager (same as --paging=always)
-  -P, --no-paging         Never use pager (same as --paging=never)
+  -p, --paging            Always use pager (means --paging=always)
+  -P, --no-paging         Never use pager (means --paging=never)
       --test              Run built-in unit tests
   -v, --verbose           Show debugging output while running
       --version           Show version and exit
 
-QUERY arguments are joined (with space) before being parsed. If FIELD=VALUE
-pairs are given (with no QUERY), create new record containing those fields; if
-QUERY is given, add the fields to the first matching record.
+Show records matching QUERY, or if FIELD=VALUE(s) are given insert those into a
+matching record (or add a new record if there is no QUERY).
 
-ZDB always make minimal changes to files. Comments and whitespace are
-preserved, and re-sorting is only done on request.
-
-NOTE: QUERY cannot start with '-', unless preceded by '--' option. Putting a
-space (or comma) at the beginning of the QUERY argument also works.
+NOTE: If QUERY begins with hyphen ('-'), it's read as an option. This can be
+avoided by, for example, adding a comma (',') to the start of QUERY (this
+doesn't change its meaning), by putting end-of-options indicator ('--') before
+QUERY, or by using the '-e' option.
 USAGE_END
 our $QUERY = <<"QUERY_END";
 NOTE: QUERY will be taken for an option if starts with '-'. To avoid, prefix it
@@ -184,7 +182,6 @@ sub highlight {
 # NOTE: Final record contain only whitespace (no data).
 {
     package ZDB;
-
     #my $ENTRY_SEPARATOR = qr/((?:\n|\A)\n+)(?!\h)/;
     my $FIELD_SEPARATOR = qr/(?<=\n(?!\s))/;
     my $ENTRY_REGEX = qr/((?:.+\R(?:\R+\h)?)+)/;
@@ -199,7 +196,6 @@ sub highlight {
         };
         return bless($self, $class);
     }
-
     sub open_file {
         my ($file) = @_;
         if (defined $file) {
@@ -210,7 +206,6 @@ sub highlight {
         die "Can't read standard input from terminal\n" if -t STDIN;
         return *STDIN;
     }
-
     # Final record will have only space, no data.
     sub read_record {
         my ($self) = @_;
@@ -229,7 +224,10 @@ sub highlight {
         }
         return ($spc, @record);
     }
-
+    sub eof {
+        my ($self) = @_;
+        return !@{$self->{rec}};
+    }
     sub DESTROY {
         my ($self) = @_;
         close($self->{fh}) or die defined($self->{file})
@@ -1230,10 +1228,8 @@ if (-t STDIN) {                                # get FILE
     pop @arg if (@arg && $arg[$#arg] eq '-');
     die "Specify either FILE or standard input, not both.\n" if @arg > 1;
 }
-if (not @query) {                              # get QUERY (unless got from -e)
-    die "No QUERY specified.\n" if @arg == 0;
-    @query = shift(@arg);
-}
+@query = shift(@arg) if @arg and !@query;      # get QUERY arg (not -eQUERY)
+die "No QUERY and/or FIELD=VALUE(s) given.\n" unless @query or @to_write;
 
 # FIXME: split $opt{pager} (?)
 $pager_pid = open(STDOUT, '|-', $opt{pager})   # send all STDOUT through pager
@@ -1254,6 +1250,14 @@ while (my ($prespace, @field) = $zdb->read_record()) {
     my @found = $query->(map @{$_}[qw/0 1/], @field); # search field name/value
     next unless @found or $opt{update};
 
+    # FIELD=VALUE(s) but no QUERY. Output new record at end.
+    if (not @query and $zdb->eof()) {
+        $out .= "\n";
+        while (@to_write) {
+            my ($field, $value) = split('=', shift(@to_write), 2);
+            $out .= "$field\t$value\n";
+        }
+    }
     # Output record (possibly with highlight, possibly not).
     $out .= $prespace;
     while (@field) {
@@ -1265,7 +1269,7 @@ while (my ($prespace, @field) = $zdb->read_record()) {
         }
         $out .= $space_beg . $field . $space_sep . $value . $space_end;
     }
-    # Insert new data.
+    # FIELD=VALUES(s) and QUERY. Insert fields into matching record.
     if (@found) {
         die "Can't insert data: QUERY may not match multiple records\n"
             if $opt{update} and not @to_write;
@@ -1295,9 +1299,9 @@ zdb - Manipulate ZDB database
 
 =over 1
 
-=item B<zdb> [I<OPTION>]... [B<-->] I<QUERY> [I<FIELD>B<=>I<VALUE>]... [I<FILE>]
+=item B<zdb> [I<OPTION>]... [B<-->] (I<QUERY>|I<FIELD>B<=>I<VALUE>...) [I<FILE>]
 
-=item B<zdb> [I<OPTION>]... B<-e>I<QUERY>... [B<-->] [I<FIELD>B<=>I<VALUE>]... [I<FILE>]
+=item B<zdb> [I<OPTION>]... B<-e>I<QUERY>... [--] [I<FIELD>B<=>I<VALUE>]... [I<FILE>]
 
 =back
 
@@ -1315,10 +1319,11 @@ output). When a (non C<->) I<FILE> is specified, that file is updated
 The I<QUERY> language is inspired by search engines, and uses (in order of
 precedence) C<-> (minus) for NOT, C<␣> (space) for AND, and C<,> for OR, C<(…)>
 (parentheses) for grouping, and a prefix notation to specify what fields to
-search. (See L</QUERIES> below.)
+search. Unterminated parentheses/quotes do not cause errors, but are
+automatically terminated for you. (See L</QUERIES> below.)
 
-There are four different modes (based on whether the I<QUERY> and/or
-I<FIELD>B<=>I<VALUE> arguments were provided or not):
+There are four different modes, depending on which of the I<QUERY> and/or
+I<FIELD>B<=>I<VALUE> arguments are provided:
 
     ┌───────────────────┬───────────────────────────────┬────────────┐
     │ –                 │ Show database summary         │ read-only  │
@@ -1933,6 +1938,9 @@ section somewhat. (2025-12-15 21:28--22:04)
 B<v0.8.6> - Added writing of new fields to a matching record. (2025-12-16
 23:36--00:03, 01:16--02:41)
 
+B<v0.8.7> - Added creation of new B<records> when giving I<FIELD>B<=>I<VALUE>
+without I<QUERY> on the command line. (2025-12-16 02:51--03:32, 06:21--06:37)
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -2231,12 +2239,6 @@ while files given on the command line will be (atomically) modified when
 inserting or deleting fields/records. A tempfile will be written next to the
 input file (for example, with the name 'I<FILE>B<.tmp>'). Then, if the
 modification is successful the file will be is renamed to replace the old file.
-
-=item Inserting new records
-
-When I<FIELD>B<=>I<VALUE> pairs arguments are given, but no I<QUERY> is present
-on the command line, the data should be inserted as a new record in the
-database.
 
 =item Add record sets B<%rec> (and B<%doc>)
 
