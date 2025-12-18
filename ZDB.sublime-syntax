@@ -1,0 +1,42 @@
+%YAML 1.2
+---
+name: ZDB
+file_extensions:
+  - .zdb
+scope: source.zdb
+
+first_line_match: '\bzdb\b'
+
+contexts:
+  main:
+    # Comments: lines starting with '#'
+    - match: ^(#)(.*)$
+      captures:
+        1: punctuation.definition.comment.zdb
+        2: comment.line.zdb
+
+    # Field names starting with %
+    - match: ^(%(?![0-9])[A-Za-z0-9_]*)([ \t]+.*)?
+      captures:
+        1: keyword.control.zdb
+        2: string.unquoted.zdb
+      push: field-value
+
+    # Field names starting with other chars
+    - match: ^([A-Za-z_][A-Za-z0-9_]*)([ \t]+.*)?
+      captures:
+        1: entity.name.function.zdb
+        2: string.unquoted.zdb
+      push: field-value
+
+    # Fallback: mark whole line as invalid
+    - match: ^.*$
+      scope: invalid.illegal.zdb
+
+  field-value:
+    # Continuation lines: indented or space-prefixed
+    - match: ^[ \t].*$
+      scope: string.unquoted.zdb
+    # End of field value: blank line or new field
+    - match: ^(?=\S)
+      pop: true

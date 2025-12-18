@@ -10,8 +10,8 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.7';                         # https://semver.org/
-our $VERSION_DATE='16 December 2025';
+our $VERSION='0.8.8';                         # https://semver.org/
+our $VERSION_DATE='18 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -1941,6 +1941,10 @@ B<v0.8.6> - Added writing of new fields to a matching record. (2025-12-16
 B<v0.8.7> - Added creation of new B<records> when giving I<FIELD>B<=>I<VALUE>
 without I<QUERY> on the command line. (2025-12-16 02:51--03:32, 06:21--06:37)
 
+B<0.8.8> - Wrote syntax hiliting files for Emacs (B<zdb-mode.el>) and B<bat>
+(B<ZDB.sublime-syntax>) and created a README with installation instructions,
+also added some notes to the docs. (2025-12-18 07:14--15:30)
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1956,13 +1960,14 @@ law. (See also C<zdb --version>.)
 
 =head1 SEE ALSO
 
-B<zdb> is partly inspired by GNU Recutils. -- When I first heard about Recutils
-I was delighted to find that its file format it is strikingly similar to the
-plain-text 'database' format I've used for my Klingon dictionary since the very
-end of the last century (see L<https://klingonska.org/dict/dict.zdb>). I was to
-a large degree inspired by the shortcomings of Recutils -- its query language
-is verbose and pretty inflexible (I felt I could do better!), and Recutils does
-not highlight matches.
+B<zdb> is partly inspired by GNU B<recutils>. -- When I first heard about
+B<recutils> I was delighted to find that its file format it is strikingly
+similar to the plain-text 'database' format I've used for my Klingon dictionary
+since the very end of the last century (see
+L<https://klingonska.org/dict/dict.zdb>). I was to a large degree inspired by
+the shortcomings of B<recutils> -- its query language is verbose and pretty
+inflexible (I felt I could do better!), and B<recutils> does not highlight
+matches.
 
 Hence, this little project! :)
 
@@ -2417,12 +2422,19 @@ also for 'month' and 'year', and also the ones supported by date: 'date',
 
 =head2 Deleting records & fields
 
-Add options for deleting records and fields. For example, add a
-B<--delete-record> option which deletes all records matched by QUERY, and a
-B<--delete-field> which deletes all fields matched by query (though the option
-names should probably be shorter). Or maybe use some other scheme? (Like using
-I<FIELD>B<=>I<VALUE> pairs with empty value to remove a field---though that
-might be better reserved for setting a field, but leaving it empty.)
+Add option for deleting records/fields. Maybe use option name B<-D>/B<--delete>
+to delete records, and B<--delete>[B<=>I<FIELD>[B<,>I<FIELD>]...] for deleting
+individual fields. (B<iptables>, B<rsync> and B<git branch> all use
+B<--delete>, and with B<iptables> and B<git branch> using shortopt B<-D>.)
+
+Deleting specific fields (when there are multiple of the same name), should use
+some kind of numbering. Maybe something like C<B<author[2]>> or C<B<author.2>>
+to delete the second 'author' field?
+
+Or maybe use some other scheme? (Like using I<FIELD>B<=>I<VALUE> pairs with
+empty value to remove a field---though that might be better reserved for
+creating a field, without giving it a value.)
+
 
 =head2 Hierarchical fields
 
