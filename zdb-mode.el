@@ -4,7 +4,7 @@
 ;; Copyright 2025 zrajm, Uppsala, Sweden
 
 ;; Author: zrajm <zdb AT klingonska.org>
-;; Version: 1.0
+;; Version: 1.1
 ;; Maintainer: zrajm
 ;; Package-Requires: ((emacs "24.1"))
 ;; URL: https://zrajm.org/zdb
@@ -40,6 +40,77 @@
     ("^.*$" . 'font-lock-warning-face)
     ))
 
+(defconst zdb--field-header-re
+  "^\\([_a-zA-Z%][_a-zA-Z0-9]*\\)\\([ \t]+\\)"
+  "Regexp matching a ZDB field header line (name + separator).")
+
+(defun zdb-fill-paragraph (&optional justify)
+  "Rewrap only the current field's value, preserving the field's separator.
+Respects blank lines and stops at the next field or comment.
+Handles tabs correctly and wraps the first line with the same right margin
+as subsequent lines."
+  (save-excursion
+    (let (sep region-start region-end)
+      ;; Find the header and separator for the current field, even from a continuation line.
+      (beginning-of-line)
+      (cond
+       ;; On a header line
+       ((looking-at zdb--field-header-re)
+        (setq sep (match-string 2))
+        (setq region-start (match-end 2)))
+       ;; On a continuation line: walk up to header
+       (t
+        (let ((found nil))
+          (while (and (not (bobp)) (not found))
+            (forward-line -1)
+            (beginning-of-line)
+            (when (looking-at zdb--field-header-re)
+              (setq sep (match-string 2))
+              (setq region-start (match-end 2))
+              (setq found t)))
+          (unless found (setq sep nil)))))
+      (when sep
+        ;; Determine region end: stop at next header, comment, or EOF.
+        (save-excursion
+          (goto-char region-start)
+          (let ((sep-re (concat "^" (regexp-quote sep)))
+                (blank-re "^[ \t]*$")
+                (stop nil))
+            (while (and (not (eobp)) (not stop))
+              (forward-line 1)
+              (beginning-of-line)
+              (cond
+               ((or (looking-at zdb--field-header-re)
+                    (looking-at "^#"))
+                (setq stop t))
+               ;; Continuation line starts with the exact separator
+               ((looking-at sep-re))
+               ;; True blank line (no content)
+               ((looking-at blank-re))
+               (t (setq stop t))))
+            (setq region-end (point))))
+        ;; Fill with tab-aware, correct first-line width:
+        ;; We temporarily insert SEP at the start of the first value line,
+        ;; so Emacs treats the first line with the same left margin as continuations.
+        ;; After filling, we remove that inserted SEP.
+        (let ((fill-prefix sep)
+              (first-prefix-added nil))
+          (save-restriction
+            (narrow-to-region region-start region-end)
+            (save-excursion
+              (goto-char (point-min))
+              (unless (looking-at (concat "^" (regexp-quote sep)))
+                (insert sep)
+                (setq first-prefix-added t)))
+            ;; Let Emacs handle paragraph splitting; tabs in SEP are respected by fill-prefix.
+            (fill-region (point-min) (point-max) justify)
+            ;; Remove the temporarily added SEP from the first line, restoring original layout.
+            (when first-prefix-added
+              (save-excursion
+                (goto-char (point-min))
+                (delete-region (point) (+ (point) (length sep)))))
+            t))))))
+
 ;;;###autoload
 (define-derived-mode zdb-mode fundamental-mode "ZDB"
   "Major mode for editing ZDB database files."
@@ -48,7 +119,9 @@
   (modify-syntax-entry ?\n ">")                ; comment end '\n'
   (modify-syntax-entry ?\" ".")                ; double quotes are non-special
   (setq-local comment-start "#")
-  (setq-local comment-start-skip "#+\\s-*"))
+  (setq-local comment-start-skip "#+\\s-*")
+  ;; Use our custom paragraph filler for M-q.
+  (setq-local fill-paragraph-function #'zdb-fill-paragraph))
 
 ;;;###autoload
 (add-to-list 'auto-mode-alist '("\\.zdb\\'" . zdb-mode))
