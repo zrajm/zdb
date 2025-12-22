@@ -10,7 +10,7 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.12';                        # https://semver.org/
+our $VERSION='0.8.13';                        # https://semver.org/
 our $VERSION_DATE='22 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -171,7 +171,11 @@ sub highlight {
                  $lvl > 0 ? "\e[30;44m"  :     # blue
                  "\e[39;49m");                 # black background
     }
-    return $out . substr($str, $prev_mark);
+    $out .= substr($str, $prev_mark);
+    # If color code is line wrapped, reinsert after newline.
+    # FIXME: This will fail if it wraps across more than one newline.
+    $out =~ s/((\e\[30;\d+m)[^\e\n]*\n)/$1$2/g;
+    return $out;
 }
 
 ###############################################################################
@@ -401,6 +405,7 @@ sub highlight {
             "'" => sub { my ($last, $chr) = @_; $last->[0]{quote} = $chr },
             CHR => sub {
                 my ($last, $chr) = @_;
+                state %special = ('*' => '\w*', '_' => '\s+');
                 return $last->[0]{quote} = '' if $chr eq $last->[0]{quote};
                 # At the start of atom, and if not quoted.
                 if (!$last->[0]{quote} and @$last == 1) {
@@ -408,7 +413,7 @@ sub highlight {
                     return $last->[0]{not}   = !$last->[0]{not}   if $chr eq '-';
                     return $last->[0]{field} = !$last->[0]{field} if $chr eq '=';
                 }
-                push(@$last, $chr);
+                push(@$last, $special{$chr} // quotemeta($chr));
             },
         );
         say "STACK: ", debug($stack) if $opt{verbose};
@@ -455,6 +460,14 @@ sub highlight {
     sub  _and_dumper { my $x = _prefix(' ', shift, map $_->(), @_); sub { $x } }
     sub   _or_dumper { my $x = _prefix(',', shift, map $_->(), @_); sub { $x } }
 
+    sub _regexify {
+        my ($opt, @str) = @_;
+        return qr/\A${\join('', @str)}\Z/iu if $opt->{field};
+        my $beg = ($str [0] =~ /^\w$/u ? '\b' : '');
+        my $end = ($str[-1] =~ /^\w$/u ? '\b' : '');
+        return qr/$beg${\join('', @str)}$end/iu;
+    }
+
     # Create string matcher function. Initial call returns a matcher function
     # (a coderef). For initial call, first arg (a hashref) contains options.
     # With 'field' falsy matches word-by-word, with 'field' truthy matches
@@ -467,9 +480,7 @@ sub highlight {
     # negated, and 0 when not negated.
     sub _atom_matcher {
         my ($meta, @str) = @_;
-        my $regex = $meta->{field}
-            ? qr/\A${\join('', @str)}\Z/iu
-            : qr/\b${\join('', @str)}\b/iu;
+        my $regex = _regexify({ field => $meta->{field} }, @str);
         return sub {
             for (@_) {
                 return !$meta->{not} || () if m/$regex/;
@@ -515,9 +526,7 @@ sub highlight {
     # position (+ 1) so as to find overlapping search terms.
     sub _atom_aggregator {
         my ($meta, @str) = @_;
-        my $regex = $meta->{field}
-            ? qr/\A${\join('', @str)}\Z/iu
-            : qr/\b${\join('', @str)}\b/iu;
+        my $regex = _regexify({ field => $meta->{field} }, @str);
         # Negative match. Return empty highlight data on match, undef
         # otherwise. (Stop on first match, for efficiency.)
         $meta->{not} and return sub {
@@ -674,7 +683,7 @@ sub highlight {
             my ($atom, %opt) = @_;
             return [
                 { type => 'atom', field => 0, not => 0, quote => '', %opt },
-                ($atom // '') =~ /\X/gu,
+                map { quotemeta $_ } ($atom // '') =~ /\X/gu,
             ];
         }
         state sub or  { [{ type => 'or',  field => 0, not => 0 }, @_] }
@@ -1552,24 +1561,30 @@ either a field called 'name' or 'alias'.)
     ├──────────────────┼───────────────┤
     │ "…" (quotes)     │ quoting       │
     ├──────────────────┼───────────────┤
-    │ ""  (two quotes) │ literal quote │
+    │ ""  (two quotes) │ literal quote │ FIXME: NOT YET IMPLEMENTED
     ├──────────────────┼───────────────┤
     │  *  (asterisk)   │ word char     │
+    ├──────────────────┼───────────────┤
+    │  _  (underscore) │ whitespace    │
     └──────────────────┴───────────────┘
 
-Only double quotes (B<">) have a special meaning, single quotes (B<'>) are
-taken literally. (C<d'armond> will thus match all occurrences said name.)
-
-All characters inside quotes are taken literally. If you want to search for a
-word or phrase that contains special characters (like parentheses, an asterisk,
-or spaces) put them inside quotes. (C<phaser pistol> will find records
-containing both the words 'phaser' and 'pistol', while C<"phaser pistol"> will
-find all occurrences of the phrase "phaser pistol".)
+Characters in double quotes are always matched as-is, so to search for special
+characters (parentheses, an asterisk, or spaces) put them in double quotes.
+(C<phaser pistol> finds records containing both of the words 'phaser' and
+'pistol' in either order, while C<"phaser pistol"> will find all occurrences of
+the phrase "phaser pistol".) Note also, that only B<double> quotes (B<">) have
+a special meaning, single quotes (B<'>) are taken literally. (C<d'armond> will
+find all occurrences of said name.)
 
 Quotes can begin and end anywhere, and so to search for a phrase where one word
 may vary use something like B<C<"the "*" of">>. The only exception to this is
 that two quotes in a row (regardless of whether it occurs inside or outside of
 a quote) will match a literal quote.
+
+One or more whitespace characters can be matched by an (unquoted) C<B<_>>. This
+will match across a line ending (within the same field), so that
+C<phaser_pistol> will match even if there's a newline between the words (while
+C<"phase pistol"> will match only if the words are separated by a single space).
 
 
 =head1 RETURN VALUE
@@ -1957,6 +1972,10 @@ matches. (2025-12-22 04:49--04:52)
 B<0.8.12> - Now sets exit status to 1 if there's no match, 0 otherwise.
 (2025-12-22 04:57--05:04)
 
+B<0.8.13> - Added search wildcards B<*> *matching zero or more word characters)
+and B<_> (matching one or more whitespace characters). (2025-12-22
+05:23--07:06)
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -2105,8 +2124,6 @@ comments (by default).
 
 =head2 Version 1.1
 
-B<Globbing support> -- in queries.
-
 B<%fields> in database to specify sort order, and defining allowed field value
 content.
 
@@ -2124,8 +2141,6 @@ comments that will be fixed in the future as well.)
 =head2 Query improvements
 
 =over 4
-
-=item Add support for globs in query
 
 =item Better word border detection
 
@@ -2353,6 +2368,8 @@ similar for checking the whole database?)
 =head2 Command behavior
 
 =over 4
+
+=item Warn when I<QUERY> is empty?
 
 =item Suppression of lengthy output
 
