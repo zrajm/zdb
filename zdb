@@ -10,8 +10,8 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.8';                         # https://semver.org/
-our $VERSION_DATE='18 December 2025';
+our $VERSION='0.8.9';                         # https://semver.org/
+our $VERSION_DATE='22 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -1496,7 +1496,7 @@ both "cat" and "cats" and "catwoman"; C<B<*fix>> matches "fix", "prefix", and
 
 Queries are case-insensitive (unless you use B<--no-ignore-case>).
 
-=head2 Logic Operators
+=head2 Logic operators
 
 The following operators are also supported:
 
@@ -1517,7 +1517,7 @@ The following operators are also supported:
     └──────────────┴──────────────┘
 
 
-=head2 Field Prefixes
+=head2 Field prefixes
 
 To only search a specific field, a field name prefix (I<FIELD>B<:>I<VALUE>) may
 be used. (For example, C<name:anderson> will find all occurrences of 'anderson'
@@ -1945,6 +1945,9 @@ B<0.8.8> - Wrote syntax hiliting files for Emacs (B<zdb-mode.el>) and B<bat>
 (B<ZDB.sublime-syntax>) and created a README with installation instructions,
 also added some notes to the docs. (2025-12-18 07:14--15:30)
 
+B<0.8.9> - Researched terminal feature 'back color erase' (B<bce>). In the end,
+no action needed. (2025-12-21 20:17--01:21)
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -1974,7 +1977,7 @@ Hence, this little project! :)
 
 =head1 INTERNALS
 
-=head2 Internal Query Format
+=head2 Internal query format
 
 The inputted query (or queries, if multiple B<-e>/B<--match=>I<QUERY> options
 are given) are parsed, normalized and compiled.
@@ -2000,7 +2003,7 @@ query or not. (When match highlighting is enabled, it also returns the
 character offsets used for the highlighting.)
 
 
-=head2 Internal Database Representation
+=head2 Internal database representation
 
 In the main loop C<read_record()> is called over and over until the entire file
 has been read. (And the query is used in turn for each record to determine
@@ -2019,6 +2022,62 @@ In the ZDB format B<BEG_SPACE> is always an empty string, and B<END_SPACE>
 always a newline. (These are mostly for future-proofing, and having the option
 of supporting other data formats in the future.) B<SEP_SPACE> may vary
 depending on the amount of whitespace found between B<FIELD> and B<VALUE>.
+
+
+=head2 Rejected ideas (for now)
+
+=over 4
+
+=item Handling of terminal feature 'back color erase' (B<bce>)
+
+After some research I don't think this issue B<needs> addressing. That
+terminals B<don't> extend the end-of-line background color to the right margin
+is the right thing to do in my eyes. Keeping it here for future reference.
+
+B<$GREP_COLORS> contain a feature C<B<ne>> which for handling the terminal
+feature 'back color erase' (B<bce>). Should B<zdb> also do this? When is it
+relevant?
+
+The (often quite opinionated) developer of Kitty (the terminal I'm currently
+using) has described B<bce> as an anti-feature, saying it won't added to
+Kitty---Which might be the correct decision for all I know (see
+L<https://github.com/kovidgoyal/kitty/discussions/3873#discussioncomment-15138580>).
+
+The following code outputs a text 30 times, and if it hits the bottom of your
+terminal window, then, on B<some> terminal & terminal multiplexers, you'll see
+the background color is set and a newline is printed you'll see the red
+background stretch out in a lite towards the right edge of the window (looking
+quite horrible)---I B<think> this in the B<bce> feature in action.
+
+    clear; for x ({1..30}) { echo $'def \e[41m red \n red \e[49m def' }
+
+Red background lines appear on: Linux console, B<qterminal> (which uses
+B<TERM=xterm>) and inside B<tmux> (regardless of which terminal it runs on).
+But not in B<kitty> or B<screen>.
+
+However, looking at the terminfo descriptions with:
+
+    infocmp $TERM | grep bce
+
+Does not correlate with the above behavior. If B<$TERM> is B<linux> (=linux
+console) and B<xterm> claim to support B<bce>, while B<tmux>, B<screen> and
+B<kitty> does not (in all instances B<TERM-256color> give the same result as
+plain as without the suffix B<-256-color>).
+
+It seems to me that what the B<$GREP_COLORS> B<ne> feature is trying to
+achieve, is to consistently extend any background color that is in effect at
+the end of the line all the way out to the right margin (the aesthetics of this
+isn't very pleasing to my eye, but I figure that's what it's going for).
+
+Trying this out on several different terminals with the command:
+
+    printf '\e[41m\e[Kfoobar\n\e[m'
+
+Yields the following result: The end-of-line background is extended to the
+right on: B<kitty>, B<linux> (= the Linux console), B<qterminal> and in B<tmux>
+(on all terminals), but not in B<screen> (in any terminal).
+
+=back
 
 
 =head1 MILESTONES
