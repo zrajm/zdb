@@ -10,7 +10,7 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.11';                        # https://semver.org/
+our $VERSION='0.8.12';                        # https://semver.org/
 our $VERSION_DATE='22 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -1282,6 +1282,7 @@ while (my ($prespace, @field) = $zdb->read_record()) {
 die "Can't insert data: QUERY did not match any record\n"
     if $opt{update} and @to_write;
 print $out;
+exit !$out;
 
 __END__
 
@@ -1952,6 +1953,9 @@ B<0.8.10> - Highlighting in three different levels. (2025-12-22 04:29--04:40)
 
 B<0.8.11> - BUGFIX: Uninitialized variable caused warning when there were no
 matches. (2025-12-22 04:49--04:52)
+
+B<0.8.12> - Now sets exit status to 1 if there's no match, 0 otherwise.
+(2025-12-22 04:57--05:04)
 
 
 =head1 COPYRIGHT AND LICENSE
