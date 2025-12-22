@@ -10,7 +10,7 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.10';                        # https://semver.org/
+our $VERSION='0.8.11';                        # https://semver.org/
 our $VERSION_DATE='22 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -1245,7 +1245,7 @@ my $zdb = new ZDB($opt{file});
 
 say 'QUERY: ' . new Query(dump => join(',', @query))->() if $opt{verbose};
 
-my $out;
+my $out = '';
 while (my ($prespace, @field) = $zdb->read_record()) {
     my @found = $query->(map @{$_}[qw/0 1/], @field); # search field name/value
     next unless @found or $opt{update};
@@ -1949,6 +1949,9 @@ B<0.8.9> - Researched terminal feature 'back color erase' (B<bce>). In the end,
 no action needed. (2025-12-21 20:17--01:21)
 
 B<0.8.10> - Highlighting in three different levels. (2025-12-22 04:29--04:40)
+
+B<0.8.11> - BUGFIX: Uninitialized variable caused warning when there were no
+matches. (2025-12-22 04:49--04:52)
 
 
 =head1 COPYRIGHT AND LICENSE
