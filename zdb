@@ -10,8 +10,8 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.13';                        # https://semver.org/
-our $VERSION_DATE='22 December 2025';
+our $VERSION='0.8.14';                        # https://semver.org/
+our $VERSION_DATE='25 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -19,6 +19,7 @@ Usage: $PROGRAM [OPTION]... [--] (QUERY|FIELD=VALUE...) [FILE]
        $PROGRAM [OPTION]... -eQUERY... [--] [FIELD=VALUE]... [FILE]
 Search or update/add records in a ZDB text file database.
 
+  -s, --case-sensitive    Do not ignore case when searching
       --color[=WHEN]      When to highlight matches (default 'auto')
                           WHEN is 'auto', 'always' or 'never'
   -c, --color             Always highlight matches (means --color=always)
@@ -26,13 +27,13 @@ Search or update/add records in a ZDB text file database.
   -e, --match=QUERY       Specify QUERY explicitly (usually omitted)
   -h, --help              Show this help and exit
       --help-query        Show QUERY syntax (it's very googlish)
-  -i, --ignore-case       Ignore case when searching (default)
-  -I, --no-ignore-case    Don't ignore case when searching
+  -i, --ignore-case       Ignore case when searching
   -M, --manual            Show zdb manual page (with 'man')
       --pager=CMD         Use CMD as pager (default 'pager')
       --paging[=WHEN]     When to use pager (default 'auto')
   -p, --paging            Always use pager (means --paging=always)
   -P, --no-paging         Never use pager (means --paging=never)
+  -S, --smart-case        Ignore case if entire QUERY is lowercase (default)
       --test              Run built-in unit tests
   -v, --verbose           Show debugging output while running
       --version           Show version and exit
@@ -40,10 +41,10 @@ Search or update/add records in a ZDB text file database.
 Show records matching QUERY, or if FIELD=VALUE(s) are given insert those into a
 matching record (or add a new record if there is no QUERY).
 
-NOTE: If QUERY begins with hyphen ('-'), it's read as an option. This can be
-avoided by, for example, adding a comma (',') to the start of QUERY (this
-doesn't change its meaning), by putting end-of-options indicator ('--') before
-QUERY, or by using the '-e' option.
+NOTE: If QUERY begins with hyphen ('-'), it's read as an option. Avoid this by,
+for example, adding a comma (',') to the start of QUERY (this doesn't change
+its meaning), by putting end-of-options indicator ('--') before QUERY, or by
+using the '-e' option.
 USAGE_END
 our $QUERY = <<"QUERY_END";
 NOTE: QUERY will be taken for an option if starts with '-'. To avoid, prefix it
@@ -166,7 +167,7 @@ sub highlight {
 
         # Insert ANSI color code.
         $lvl += ($type eq 'beg') ? +1 : -1;
-        $out .= ($lvl > 2 ? "\e[30;47m"  :     # while
+        $out .= ($lvl > 2 ? "\e[30;47m"  :     # white
                  $lvl > 1 ? "\e[30;106m" :     # bright teal
                  $lvl > 0 ? "\e[30;44m"  :     # blue
                  "\e[39;49m");                 # black background
@@ -324,8 +325,9 @@ sub highlight {
     );
 
     sub new {
-        my ($class, $lang, $query_str) = @_;
-        my $query = _compile($lang{$lang}, _normalize(_parse($query_str)))
+        my ($class, $query_str, $opt) = @_;
+        $opt->{lang} = $lang{$opt->{lang} // 'plain'};
+        my $query = _compile(_normalize(_parse($query_str)), $opt)
             or die "Failed to parse query";
         return bless($query, $class);
     }
@@ -462,10 +464,14 @@ sub highlight {
 
     sub _regexify {
         my ($opt, @str) = @_;
-        return qr/\A${\join('', @str)}\Z/iu if $opt->{field};
-        my $beg = ($str [0] =~ /^\w$/u ? '\b' : '');
-        my $end = ($str[-1] =~ /^\w$/u ? '\b' : '');
-        return qr/$beg${\join('', @str)}$end/iu;
+        my $str = join('', @str);
+        my $regex_flags = $opt->{case} ? '' : 'i';
+        my ($beg, $end) = $opt->{field}
+            ? ('^', '$')                       # whole field match
+            : map {                            # word border for start/end
+                /^\w$/u ? '\b' : '';           #   if last/first is letter
+            } @str[0, -1];
+        return qr/$beg(?$regex_flags:$str)$end/u;
     }
 
     # Create string matcher function. Initial call returns a matcher function
@@ -480,7 +486,7 @@ sub highlight {
     # negated, and 0 when not negated.
     sub _atom_matcher {
         my ($meta, @str) = @_;
-        my $regex = _regexify({ field => $meta->{field} }, @str);
+        my $regex = _regexify($meta, @str);
         return sub {
             for (@_) {
                 return !$meta->{not} || () if m/$regex/;
@@ -526,7 +532,7 @@ sub highlight {
     # position (+ 1) so as to find overlapping search terms.
     sub _atom_aggregator {
         my ($meta, @str) = @_;
-        my $regex = _regexify({ field => $meta->{field} }, @str);
+        my $regex = _regexify($meta, @str);
         # Negative match. Return empty highlight data on match, undef
         # otherwise. (Stop on first match, for efficiency.)
         $meta->{not} and return sub {
@@ -616,12 +622,14 @@ sub highlight {
     # value match. The query function returns either an array of highlight
     # positions (if were matches found), or undef (if no matches were found).
     sub _compile {
-        my ($lang, $term) = @_;
+        my ($term, $opt) = @_;
         return $term unless ref($term);
         my ($meta, @data) = @$term;
         my $type = $meta->{type};
-        die "Unknown subquery type: '$type'\n" unless exists $lang->{$type};
-        return $lang->{$type}($meta, map { _compile($lang, $_) } @data);
+        my $func = $opt->{lang}{$type}
+            // die "Unknown query term type: '$type'\n";
+        $meta->{case} //= $opt->{case};
+        return $func->($meta, map { _compile($_, $opt) } @data);
     }
 
     # FIXME: Test some actual queries
@@ -1186,12 +1194,12 @@ local %SIG = (
 
 my (@arg, @query, @to_write);
 %opt = (
+    case   => -1,                              # -1: smart, 0: exact, 1: ignore
     color  => -t STDOUT,
     file   => undef,
     info   => '',
     update => '',
     man    => '',
-    nocase => 1,
     pager  => $ENV{PAGER} // $ENV{ZDBPAGER} // 'pager',
     paging => -t STDOUT,
     test   => 0,
@@ -1203,19 +1211,22 @@ while (@ARGV) {
     # NOTE! Shortopts with args must be in (negated) character class below!
     s/(?<=^-[^-e]).+//x            and unshift(@ARGV, "-$&"); # bundled opts
     /^        --               $/x and do { push(@arg, @ARGV);          last };
+    /^(-s    |--case-sensitive)$/x and do { $opt{case}  = 1;            next };
     /^ -c                      $/x and do { $opt{color} = 1;            next };
     /^(-C    |--no-colou?r    )$/x and do { $opt{color} = 0;            next };
     /^        --colou?r(=(.*))?$/x and do { $opt{color} = whenarg($2);  next };
     /^(-e(.*)|--match (=(.*))?)$/x and do { push @query, $2||$4//shift; next };
     /^(-h    |--help          )$/x and do { $opt{info} = $USAGE;        next };
     /^(       --help-query    )$/x and do { $opt{info} = $QUERY;        next };
-    /^(-i    |--ignore-case   )$/x and do { $opt{nocase} = 1;           next };
-    /^(-I    |--no-ignore-case)$/x and do { $opt{nocase} = 0;           next };
+    /^(-i    |--ignore-case   )$/x and do { $opt{case} = '';            next };
+    /^(-I    |--no-ignore-case)$/x and do { $opt{case} =  1;            next };
     /^(-M    |--man(ual)?     )$/x and do { $opt{man} = 1;              next };
     /^        --pager  (=(.*))?$/x and do { $opt{pager} = $2//shift;    next };
     /^        --paging (=(.*))?$/x and do { $opt{paging} = whenarg($2); next };
     /^ -p                      $/x and do { $opt{paging} = 1;           next };
     /^(-P    |--no-paging     )$/x and do { $opt{paging} = 0;           next };
+    /^(-S    |--smart-case    )$/x and do { $opt{case} = -1;            next };
+    /^(       --no-smart-case )$/x and do { $opt{case} =  1;            next };
     /^(       --test          )$/x and do { $opt{test} = 1;             next };
     /^(-v    |--verbose       )$/x and do { $opt{verbose} = 1;          next };
     /^(       --version       )$/x and do { $opt{info} = version();     next };
@@ -1249,10 +1260,16 @@ if (@to_write) {
     $opt{color}  = 0;
     $opt{update} = 1;
 }
-my $query = new Query(($opt{color} ? 'color' : 'plain') => join(',', @query));
+my $query_str = join(',', @query);
+$opt{case} = ($query_str =~ /\p{Uppercase}/u) if $opt{case} eq -1;
+my $query = new Query($query_str, {
+    lang => $opt{color} ? 'color' : 'plain',
+    case => $opt{case},
+});
 my $zdb = new ZDB($opt{file});
 
-say 'QUERY: ' . new Query(dump => join(',', @query))->() if $opt{verbose};
+say 'QUERY: ' . new Query(join(',', @query), { lang => 'dump' })->()
+    if $opt{verbose};
 
 my $out = '';
 while (my ($prespace, @field) = $zdb->read_record()) {
@@ -1350,6 +1367,17 @@ I<FIELD>B<=>I<VALUE> arguments are provided:
 
 =over 7
 
+=item B<-s>, B<--case-sensitive>
+
+Perform case-sensitive search. This option overrides B<-S>/B<--smart-case>
+(default) and B<-i>/B<--ignore-case>.
+
+B<RATIONALE:> These option names (both long & short), are only used by a few of
+the programs I've taken inspiration from: B<ag> (The Silver Searcher) and B<rg>
+(ripgrep). However, the non-negated B<--case-sensitive> is clearer in intent
+than negated B<-I>/B<--no-ignore-case> and B<--no-smart-case> (all of these
+options have the same effect in B<zdb>).
+
 =item B<--color>[B<=>I<WHEN>], B<--colour>[B<=>I<WHEN>] (default B<auto>)
 
 When to highlight search matches in the output.
@@ -1404,17 +1432,25 @@ Output a usage message and exit.
 
 Display a cheat sheet for the QUERY syntax. (See also L</QUERIES> below).
 
-=item B<-i>, B<--ignore-case> (default)
+=item B<-i>, B<--ignore-case>
 
-Ignore case distinctions when searching. (This is the default.) This option is
-useful to override any previously given B<--no-ignore-case> on the same command
-line. (Option inspired by B<grep>.)
+Ignore all case distinctions in I<QUERY>. This option overrides
+B<-S>/B<--smart-case> (default) and B<-s>/B<--case-sensitive>.
+
+B<RATIONALE:> These option names (both long & short), are used by the original
+B<grep>, and is supported by B<all> the search programs I've looked at: B<ag>
+(The Silver Searcher), B<git grep>, B<grep>, B<pt> (The Platinum Searcher),
+B<rg> (ripgrep), B<sift>, and B<ucg> (UniversalCodeGrep).
 
 =item B<-I>, B<--no-ignore-case>
 
-Consider case distinctions when searching. By default search is
-case-insensitive, use this option to override that. (Option inspired by
-B<grep>.)
+The opposite of B<-i>/B<--ignore-case>. This is an alias for
+B<-s>/B<--case-sensitive> (which is clearer in its meaning).
+
+B<RATIONALE:> These option names (both long & short) exists for consistency
+with grep B<grep>, it is actually an alias for B<-s>/B<--case-sensitive> (which
+is clearer in meaning). The long option name is used by B<ack>, B<grep>, and
+B<sift>, and the shortopt B<-I> is used by B<ack> and B<sift>.
 
 =item B<-M>, B<--man>, B<--manual>
 
@@ -1464,6 +1500,27 @@ as B<--paging>[B<=>I<WHEN>] without specifying the I<WHEN> argument.)
 Never use pager. Short for B<--paging=never>. (Option inspired by B<bat>,
 though B<--no-paging> is unique to B<zdb>.)
 
+=item B<-S>, B<--smart-case> (default)
+
+Make case-insensitive search, unless there are one or more uppercase characters
+in I<QUERY>, in which case the whole query will be case-sensitive. This option
+overrides B<-s>/B<--case-sensitive> and B<-i>/B<--ignore-case>.
+
+B<RATIONALE:> The same long option name is used by B<ack>, B<ag> (The Silver
+Searcher), B<pt> (The Platinum Searcher), B<rg> (ripgrep), B<sift>, and B<ucg>
+(UniversalCodeGrep), and the shortopt is used by B<ack>, B<ag>, B<pt>, B<rg>.
+
+=item B<--no-smart-case>
+
+The opposite of B<-S>/B<--smart-case>. This is an alias for
+B<-s>/B<--case-sensitive> (which is clearer in its meaning).
+
+B<RATIONALE:> The long option name exists for consistency with B<ack>, and
+B<sift> (while B<ucg> (UniversalCodeGrep) uses the similarly named
+B<--nosmart-case>---an abomination not supported by B<zdb>). B<sift> uses the
+shortopt B<-S> for this meaning, but B<zdb> follows the majority and uses B<-S>
+to mean B<--smart-case>.
+
 =item B<--test>
 
 Run built-in unit tests. Tests are run using Perl's standard B<Test::More>
@@ -1490,21 +1547,25 @@ to be terse, intuitive, expressive, and forgiving. Unmatched parentheses and
 quotes are fine (they will be terminated for you). Text in quotes is
 interpreted literally (special characters/operators lose their meaning).
 
-B<NOTE:> QUERY arguments are joined together (with spaces) before being
-processed. But remember that the shell processes its quotes before the
-arguments are ever seen by B<zdb>. This means that you have to quote your
-quotes! It's usually most convenient to put single quotes around your whole
-query (which gets eaten by the shell) and then use double quotes inside that if
-you need it. For example:
+B<NOTE:> The shell processes its quotes before the arguments are ever seen by
+B<zdb>. This means that you have to quote your quotes! It's usually most
+convenient to put single quotes around your whole query (these outer quotes
+eaten by the shell) and then use double quotes inside that if you need it. For
+example:
 
     zdb 'name:("crew member",crewmember)' -fklingon.zdb
 
 Query is matched word-by-word (C<B<cat>> does not match "cats"). An (unquoted)
 asterisk (B<*>) may be used to match zero or more letters: C<B<cat*>> matches
 both "cat" and "cats" and "catwoman"; C<B<*fix>> matches "fix", "prefix", and
-"suffix".
+"suffix". An (unquoted) underscore (B<_>) can be used to match one or more
+whitespace characters (including newlines).
 
-Queries are case-insensitive (unless you use B<--no-ignore-case>).
+Search is case-insensitive by default, except if I<QUERY> contains any
+uppercase letters, in which case the entire I<QUERY> is read as case-sensitive.
+(Options B<-S>/B<--smart-case> [default], B<-s>/B<--case-sensitive> and
+B<-i>/B<--ignore-case> change this behavior.)
+
 
 =head2 Logic operators
 
@@ -1563,9 +1624,9 @@ either a field called 'name' or 'alias'.)
     ├──────────────────┼───────────────┤
     │ ""  (two quotes) │ literal quote │ FIXME: NOT YET IMPLEMENTED
     ├──────────────────┼───────────────┤
-    │  *  (asterisk)   │ word char     │
+    │ *   (asterisk)   │ word char     │
     ├──────────────────┼───────────────┤
-    │  _  (underscore) │ whitespace    │
+    │ _   (underscore) │ whitespace    │
     └──────────────────┴───────────────┘
 
 Characters in double quotes are always matched as-is, so to search for special
@@ -1976,6 +2037,11 @@ B<0.8.13> - Added search wildcards B<*> *matching zero or more word characters)
 and B<_> (matching one or more whitespace characters). (2025-12-22
 05:23--07:06)
 
+B<0.8.14> - Implemented options B<-s>/B<--case-sensitive>,
+B<-i>/B<--ignore-case> and B<-S>/B<--smart-case> for controlling
+case-sensitivity of matching. (2025-12-22 07:08--10:34, 19:49--20:32,
+21:26--04:15, 2025-12-25 22:27--23:48)
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -2167,31 +2233,13 @@ prettier.)
 Option to enable/disable searching comments. By default comments should not be
 searched.
 
-=item Smart case matching
+=item Multiple I<QUERY>s(?)
 
-When implemented, smart case matching shall be the default.
-
-B<ack>, B<ag> (The Silver Searcher), B<rg> (ripgrep) and B<ucg>
-(UniversalCodeGrep) have a B<--smart-case> option (B<ack>, B<ag>, B<rg> also
-has shortopt B<-S> for B<--smart-case>, while B<ucg> doesn't have a shortopt).
-B<ag> describes it as: "Match case-sensitively if there are any uppercase
-letters in PATTERN, case-insensitively otherwise. Enabled by default." And
-B<ucg> describes it as: "Ignore case if PATTERN is all lowercase (default:
-enabled)."
-
-B<less> has the B<-i>/B<--ignore-case> option with the same function: "Causes
-searches to ignore case; that is, uppercase and lowercase are considered
-identical. This option is ignored if any uppercase letters appear in the search
-pattern; in other words, if a pattern contains uppercase letters, then that
-search does not ignore case."
-
-Add b<-s>/B<--smart-case> and b<-S>/B<--no-smart-case>. This option should
-override (and be overridden by) B<--ignore-case> and B<--no-ignore-case>. Query
-arguments (either using B<-e>/B<--match=>I<QUERY>, or plain I<QUERY>) should
-use whatever option was in effect when the I<QUERY> argument was parsed. (That
-is, an B<--ignore-case> option should only affect queries occurring after it on
-the command line---and a warning should be given to the user if one of the case
-options occur late enough to never affect a query).
+When providing multiple I<QUERY>s on the command line (with multiple
+B<-e>/B<--match=>I<QUERY>) each query should be parsed on its own, and
+processed with whatever case options where valid at that point in the command
+line. Just like multiple B<-e>I<PATTERN> expressions in B<grep> the queries
+should be OR:ed together.
 
 =item Match record sets
 
