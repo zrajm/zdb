@@ -10,8 +10,8 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.14';                        # https://semver.org/
-our $VERSION_DATE='25 December 2025';
+our $VERSION='0.8.15';                        # https://semver.org/
+our $VERSION_DATE='26 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -632,17 +632,83 @@ sub highlight {
         return $func->($meta, map { _compile($_, $opt) } @data);
     }
 
+    sub filter_stdout {
+        my ($func, $end_func) = @_;
+        pipe my $pipe_in, my $pipe_out or die "Pipe: $!";
+        my $pid = fork() // die "Fork: $!";
+        # Child (reads from pipe, writes to terminal).
+        if ($pid > 0) {
+            close $pipe_out;
+            $func->($_) while <$pipe_in>;
+            $end_func->();
+            close $pipe_in;
+            exit;
+        }
+        # Parent (STDOUT -> pipe).
+        open STDOUT, '>&', $pipe_out or die "STDOUT to pipe: $!";
+        close $pipe_in;
+        close $pipe_out;
+    }
+    {
+        my ($pass, $fail, $todo_pass, @todo_fail) = (0, 0, 0);
+        sub line {
+            local ($_) = @_; chomp;
+            my $subtest = s/^\s+//;
+            for ($_) {
+                m/^\s*1\.\.[0-9]+        \b/x and                  return;
+                m/^\s*not\sok\b.*\#\sTODO\b/x and do { push @todo_fail, $_; return };
+                m/^\s*     ok\b.*\#\sTODO\b/x and do { $todo_pass += 1;     next   };
+                m/^\s*not\sok            \b/x and do { $fail += 1; next   };
+                m/^\s*     ok            \b/x and do { $pass += 1; return };
+                m/^\s*[#]                  /x and do {
+                    print "\e[36m$_\e[m\e[K\r"  # cyan
+                        unless /no tests run/i;
+                    return;
+                };
+            }
+            my $beg =
+                /^\s*not\sok\b.*\#\sTODO\b/x ? '32'    : # green  - not ok TODO
+                /^\s*     ok\b.*\#\sTODO\b/x ? '1;7;33': # yellow - ok TODO
+                /^\s*not\sok            \b/x ? '1;7;31': # red    - not ok
+                /^\s*     ok            \b/x ? '32'    : # green  - ok
+                /^\s*\#                   /x ? '36'    : # cyan   - #
+                /^\s*1\.\.\d+           \b/x ? '35'    : # purple - 0..N
+                '';
+            say(($subtest && "\n") . "\e[${beg}m$_\e[0m\e[K");
+        }
+        sub done {
+            say((
+                $fail      ? "\e[1;31mFAIL!"       :
+                $todo_pass ? "\e[1;33mUNEXPECTED FINISHED TODO!" :
+                             "\e[1;32mALL PASSED!"
+            ) . "\e[m (" . join(
+                ' / ',
+                ($fail      ? "\e[1;31m$fail failed\e[m"              : ()),
+                ($todo_pass ? "\e[1;33m$todo_pass finished TODO\e[m"  : ()),
+                ($pass      ? "\e[1;32m$pass passed\e[m"              : ()),
+                (@todo_fail ? "\e[1;32m" . scalar(@todo_fail) . " remaining TODO\e[m" : ()),
+            ) . ")\e[K");
+            if ($todo_pass) {
+                say "  (Turn above finished TODOs into a normal tests!)";
+            } elsif (@todo_fail) {
+                say "\e[1;33mREMAINING TODO:\e[m";
+                say "  \e[33m* $_\e[m" for @todo_fail;
+            }
+        }
+    }
+
     # FIXME: Test some actual queries
     #        my $record = record(<<~"END_RECORD");
     #            country	Greenland
     #            name	Anders Grönroot
     #            END_RECORD
     sub test {
+        my ($color) = @_;
+        filter_stdout(\&line, \&done) if $color;
         require Test::More;                    # load at runtime
         import Test::More;                     #   (not compile time)
         sub subtest;
         our $TODO;
-        Test::More->builder->todo_output(\(my $x)); # no errors on TODO tests
         # Modify 'is_deeply()' for better diagnostics.
         state sub is_deeply {
             my ($have, $want, $msg) = @_;
@@ -681,10 +747,10 @@ sub highlight {
         }
         state sub TODO {
             my ($msg, $coderef, @args) = @_;
-            local $TODO = 'Not Yet Implemented';
-            print STDERR "\e[33m";
-            Test::More::subtest("TODO $msg", $coderef, @args);
-            print STDERR "\e[39m";
+            Test::More::subtest("TODO $msg", sub {
+                local $TODO = 'Not Yet Implemented';
+                $coderef->(@_);
+            }, @args);
         }
 
         state sub atom {
@@ -1236,7 +1302,7 @@ while (@ARGV) {
 }
 
 $opt{man}  and manpage();
-$opt{test} and do { Query::test();    exit };
+$opt{test} and do { Query::test($opt{color}); exit };
 $opt{info} and do { print $opt{info}; exit };
 die "Only one FILE may be specified.\n" if @arg > 2;
 if (-t STDIN) {                                # get FILE
@@ -1527,6 +1593,11 @@ Run built-in unit tests. Tests are run using Perl's standard B<Test::More>
 module. However, the module is loaded at runtime, rather than (the way it is
 normally done) at compile time---This is to avoid impacting the load time of
 normal use of the program (when the B<--test> option isn't used).
+
+If B<--color> is enabled (which is the default), test will be filtered to show
+a condensed, colorized form. In this form passing tests are not show in the
+general output, and any remaining TODO tests will be listed at the end, if all
+tests passed.
 
 =item B<--version>
 
@@ -2042,6 +2113,12 @@ B<-i>/B<--ignore-case> and B<-S>/B<--smart-case> for controlling
 case-sensitivity of matching. (2025-12-22 07:08--10:34, 19:49--20:32,
 21:26--04:15, 2025-12-25 22:27--23:48)
 
+B<0.8.15> - Improve B<--test> output. Test output is now run through a filter,
+that removes passing, only showing fails and unexpected passes in TODO blocks.
+If all tests passed, a summary of remaining TODO(s) is also shown. Tests also
+obey color setting---the original test output is show if color output is
+disabled with B<--no-color>. (2025-12-24 19:12--03:09, 2025-12-26 00:02--00:44)
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -2308,26 +2385,17 @@ between the matches inside the pager.
 Maybe B<delta> uses the option B<--navigate> to: "Activate diff navigation. Use
 'n' to jump forwards and 'N' to jump backwards."
 
+=item Syntax Highlighting
+
+Syntax highlighting, on top of the search highlight. This should use different
+colors for comments (when shown), field names, special field names (beginning
+with B<%>) and field values.
+
 =back
 
 =head2 Unit tests
 
 =over 4
-
-=item Colorize unit test results
-
-Failures should be clearly highlighted. The final result of the test suite
-should be clearly indicated ('FAIL' or 'PASS' with red or green background).
-
-=item Any passing TODO tests should result in fail!
-
-Since test suite is kinda ridiculously verbose, failing TODO tests should
-result in a very clear message failure at the end.
-
-=item List TODO comments at end of testing
-
-As TODO items are a wishlist for what to implement, they should be clearly
-visible.
 
 =item Speed up program load time?
 
