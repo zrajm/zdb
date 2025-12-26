@@ -10,13 +10,12 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.15';                        # https://semver.org/
+our $VERSION='0.8.16';                        # https://semver.org/
 our $VERSION_DATE='26 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
-Usage: $PROGRAM [OPTION]... [--] (QUERY|FIELD=VALUE...) [FILE]
-       $PROGRAM [OPTION]... -eQUERY... [--] [FIELD=VALUE]... [FILE]
+Usage: $PROGRAM [OPTION]... [--] [QUERY] [FIELD=VALUE]... [FILE]
 Search or update/add records in a ZDB text file database.
 
   -s, --case-sensitive    Do not ignore case when searching
@@ -191,25 +190,58 @@ sub highlight {
     my $FIELD_SEPARATOR = qr/(?<=\n(?!\s))/;
     my $ENTRY_REGEX = qr/((?:.+\R(?:\R+\h)?)+)/;
     sub new {
-        my ($class, $file) = @_;
-        my $fh = open_file($file);
+        my ($class, %opt) = @_;
+        my $tempfile = $opt{write} && $opt{file} ? ".$opt{file}.tmp"  : '';
+        my $lockfile = $opt{write} && $opt{file} ? _lock($opt{file})  : '';
+        my $out      = $opt{write}               ? _open_w($tempfile) : '';
+        my $in       =                             _open_r($opt{file});
         my $self = {
-            file => $file,
-            fh   => $fh,
-            rec  => [split($ENTRY_REGEX, do { local $/; <$fh> })],
+            file => $opt{file},
+            lock => $lockfile,
+            temp => $tempfile,
+            out  => $out,
+            in   => $in,
+            rec  => [split($ENTRY_REGEX, do { local $/; <$in> })],
             num  => 0,
         };
         return bless($self, $class);
     }
-    sub open_file {
+    # Write a lockfile symlink with following data 'user@host.pid:epoch' and
+    # erase the file when we go out of scope.
+    sub _lock {
         my ($file) = @_;
-        if (defined $file) {
-            open(my $fh, '<', $file)
-                or die "Can't open file '$file' for reading: $!\n";
-            return $fh;
+        my ($lock, $time, $host, $user) = (".$file.lock", time(), do {
+            open my $fh, '</etc/hostname'; <$fh> =~ /.*/; $&;
+        }, (getpwuid($<) // ''));
+        symlink("$user\@$host.$$:$time", $lock)
+            or die "Cannot lock file '$file': Lock held by other process\n" . do {
+                my ($user, $host, $pid, $time) = (readlink($lock) // '')
+                    =~ /^([^@]*)@(.*)\.(\d*):(\d*)$/;
+                my $info = join ', ', grep { $_ }
+                    $user && "by user $user",
+                    $host && "on host $host",
+                    $pid  && "process $pid",
+                    $time && "on " . localtime($time);
+                $info && "    ($info)\n";
+            };
+        return $lock;
+    }
+    sub _open_r {
+        my ($file) = @_;
+        if (not $file) {
+            die "Can't read standard input from terminal\n" if -t STDIN;
+            return *STDIN;
         }
-        die "Can't read standard input from terminal\n" if -t STDIN;
-        return *STDIN;
+        open(my $fh, '<', $file)
+            or die "Can't open file '$file' for reading: $!\n";
+        return $fh;
+    }
+    sub _open_w {
+        my ($file) = @_;
+        return *STDOUT if not $file;
+        open(my $fh, '>', $file)
+            or die "Can't open file '$file' for writing: $!\n";
+        return $fh;
     }
     # Final record will have only space, no data.
     sub read_record {
@@ -229,16 +261,30 @@ sub highlight {
         }
         return ($spc, @record);
     }
+    sub write {
+        my ($self, @data) = @_;
+        print { $self->{out} } @data;
+    }
     sub eof {
         my ($self) = @_;
         return !@{$self->{rec}};
     }
     sub DESTROY {
         my ($self) = @_;
-        close($self->{fh}) or die defined($self->{file})
-            ? "Can't close file '$self->{file}': $!\n"
+        close($self->{in}) or die $self->{file}
+            ? "Can't close input file '$self->{file}': $!\n"
             : "Can't close standard input: $!\n"
-            if $self->{fh};
+            if $self->{in};
+        close($self->{out}) or die $self->{temp}
+            ? "Can't close output file '$self->{temp}': $!\n"
+            : "Can't close standard output: $!\n"
+            if $self->{temp};
+        rename $self->{temp}, $self->{file}
+            or die "Can't rename file '$self->{temp}' to '$self->{file}': $!\n"
+            if $self->{temp};
+        unlink $self->{lock}
+            or warn "Can't delete lock file '$self->{lock}': $!"
+            if $self->{lock};
     }
 }
 
@@ -1258,18 +1304,19 @@ local %SIG = (
             $tip ? "Try '$PROGRAM --help' for more information.\n" : ());
     });
 
-my (@arg, @query, @to_write);
+my (@arg, @query);
+my $to_write = '';
 %opt = (
     case   => -1,                              # -1: smart, 0: exact, 1: ignore
     color  => -t STDOUT,
-    file   => undef,
+    file   => '',
     info   => '',
-    update => '',
     man    => '',
     pager  => $ENV{PAGER} // $ENV{ZDBPAGER} // 'pager',
     paging => -t STDOUT,
     test   => 0,
     verbose=> '',
+    write  => '',
 );
 @ARGV = map { decode } @ARGV;
 while (@ARGV) {
@@ -1296,8 +1343,8 @@ while (@ARGV) {
     /^(       --test          )$/x and do { $opt{test} = 1;             next };
     /^(-v    |--verbose       )$/x and do { $opt{verbose} = 1;          next };
     /^(       --version       )$/x and do { $opt{info} = version();     next };
+    /^((?!\d)\w+)        =(.*) $/x and do { $to_write .= "$1\t$2\n";    next };
     die "Unknown option '${ s/=.*//; \$_ }'.\n" if /^-./;
-    /^ [a-zA-Z%][a-zA-Z0-9]* =  /x and do { push(@to_write, $_);        next };
     push(@arg, $_);
 }
 
@@ -1315,16 +1362,16 @@ if (-t STDIN) {                                # get FILE
     die "Specify either FILE or standard input, not both.\n" if @arg > 1;
 }
 @query = shift(@arg) if @arg and !@query;      # get QUERY arg (not -eQUERY)
-die "No QUERY and/or FIELD=VALUE(s) given.\n" unless @query or @to_write;
+die "No QUERY and/or FIELD=VALUE(s) given.\n" unless @query or $to_write;
 
 # FIXME: split $opt{pager} (?)
 $pager_pid = open(STDOUT, '|-', $opt{pager})   # send all STDOUT through pager
     or die "Can't exec '$opt{pager}': $!\n"    #   (if enabled)
     if $opt{paging};
 
-if (@to_write) {
-    $opt{color}  = 0;
-    $opt{update} = 1;
+if ($to_write) {
+    $opt{color} = 0;
+    $opt{write} = 1;
 }
 my $query_str = join(',', @query);
 $opt{case} = ($query_str =~ /\p{Uppercase}/u) if $opt{case} eq -1;
@@ -1332,7 +1379,10 @@ my $query = new Query($query_str, {
     lang => $opt{color} ? 'color' : 'plain',
     case => $opt{case},
 });
-my $zdb = new ZDB($opt{file});
+my $zdb = new ZDB(
+    file  => $opt{file},                       # input file
+    write => $opt{write},                      # write mode?
+);
 
 say 'QUERY: ' . new Query(join(',', @query), { lang => 'dump' })->()
     if $opt{verbose};
@@ -1340,14 +1390,14 @@ say 'QUERY: ' . new Query(join(',', @query), { lang => 'dump' })->()
 my $out = '';
 while (my ($prespace, @field) = $zdb->read_record()) {
     my @found = $query->(map @{$_}[qw/0 1/], @field); # search field name/value
-    next unless @found or $opt{update};
+    next unless @found or $opt{write};
 
     # FIELD=VALUE(s) but no QUERY. Output new record at end.
     if (not @query and $zdb->eof()) {
         $out .= "\n";
-        while (@to_write) {
-            my ($field, $value) = split('=', shift(@to_write), 2);
-            $out .= "$field\t$value\n";
+        if ($to_write) {
+            $out .= $to_write;
+            $to_write = '';
         }
     }
     # Output record (possibly with highlight, possibly not).
@@ -1363,17 +1413,22 @@ while (my ($prespace, @field) = $zdb->read_record()) {
     }
     # FIELD=VALUES(s) and QUERY. Insert fields into matching record.
     if (@found) {
-        die "Can't insert data: QUERY may not match multiple records\n"
-            if $opt{update} and not @to_write;
-        while (@to_write) {
-            my ($field, $value) = split('=', shift(@to_write), 2);
-            $out .= "$field\t$value\n";
+        die "Can't insert data, QUERY matched more than one record\n"
+            if $opt{write} and not $to_write;
+        if ($to_write) {
+            $out .= $to_write;
+            $to_write = '';
         }
     }
 }
-die "Can't insert data: QUERY did not match any record\n"
-    if $opt{update} and @to_write;
-print $out;
+die "Can't insert data, QUERY did not match any record\n"
+    if $opt{write} and $to_write;
+
+if ($opt{write} and $out) {
+    $zdb->write($out);
+} else {
+    print $out;
+}
 exit !$out;
 
 __END__
@@ -1392,9 +1447,7 @@ zdb - Manipulate ZDB database
 
 =over 1
 
-=item B<zdb> [I<OPTION>]... [B<-->] (I<QUERY>|I<FIELD>B<=>I<VALUE>...) [I<FILE>]
-
-=item B<zdb> [I<OPTION>]... B<-e>I<QUERY>... [--] [I<FIELD>B<=>I<VALUE>]... [I<FILE>]
+=item B<zdb> [I<OPTION>]... [B<-->] [I<QUERY>] [I<FIELD>B<=>I<VALUE>]... [I<FILE>]
 
 =back
 
@@ -1404,16 +1457,17 @@ zdb - Manipulate ZDB database
 B<zdb> is a utility for searching and manipulating human-readable text-based
 database files (in ZDB format).
 
+The I<QUERY> language has compact but expressive syntax (inspired by search
+engines). You can use the following (in order of precedence) C<B<->> (minus)
+for NOT, C<B<␣>> (space) for AND, and C<B<,>> for OR, C<B<(>I<...>B<)>>
+(parentheses) for grouping, and C<I<FIELD>B<:>I<VALUE>> to specify which fields
+to search. Unterminated parentheses/quotes do not cause errors, but are
+automatically terminated for you. (See L</QUERIES> below.)
+
 A I<FILE> of C<-> stands for standard input. When receiving input on standard
 input, B<zdb> acts like a text filter (outputting the results to standard
-output). When a (non C<->) I<FILE> is specified, that file is updated
-(atomically) on success.
-
-The I<QUERY> language is inspired by search engines, and uses (in order of
-precedence) C<-> (minus) for NOT, C<␣> (space) for AND, and C<,> for OR, C<(…)>
-(parentheses) for grouping, and a prefix notation to specify what fields to
-search. Unterminated parentheses/quotes do not cause errors, but are
-automatically terminated for you. (See L</QUERIES> below.)
+output). When writing to file (that is, when I<FILE> is other than C<B<->>)
+that file is updated (atomically) on success.
 
 There are four different modes, depending on which of the I<QUERY> and/or
 I<FIELD>B<=>I<VALUE> arguments are provided:
@@ -1838,11 +1892,15 @@ when searching in B<less>).
 
 =head1 FILES
 
-The only file read by B<zdb> is the inputted ZDB database file. Currently all
-output is written to standard output, but this B<will change>. In the future a
-file specified on the command line will be modified when inserting or deleting
-fields/records. Like now, when the ZDB database is given on standard input,
-modified content will be written to standard output.
+B<zdb> can act either as a text filter, with a B<zdb> file piped in on standard
+input (with either no file give on the command line, or I<FILE> specified as
+C<B<->>), in which case output is written to standard output.
+
+If an input I<FILE> is given on the command line, that file is updated
+in-place. This is done using atomic updates (output is written to a tempfile,
+called C<B<.>I<FILE>B<.tmp>>, and after a successful write, it is renamed to
+replace the old file). A lockfile is also used, and B<zdb> will refuse to
+modify a database that is currently being modified by another B<zdb> instance.
 
 
 =head1 CAVEATS
@@ -2118,6 +2176,8 @@ that removes passing, only showing fails and unexpected passes in TODO blocks.
 If all tests passed, a summary of remaining TODO(s) is also shown. Tests also
 obey color setting---the original test output is show if color output is
 disabled with B<--no-color>. (2025-12-24 19:12--03:09, 2025-12-26 00:02--00:44)
+
+B<0.8.16> - Added lockfile and (atomic) file updates. (2025-12-26 00:45--08:41)
 
 
 =head1 COPYRIGHT AND LICENSE
@@ -2434,16 +2494,6 @@ characters from the B<%alphabet> set (with C<NFC()>).
 There should maybe be an option to produce automatic linebreaks in fields? How
 about fields containing explicit newlines? (Like an address, or poetry?)
 
-=item Atomic file updates
-
-Currently data is always output to standard output, regardless of whether it
-was read from standard input, or from file specified on the command line. In
-the future, input on standard input will result in output to standard output,
-while files given on the command line will be (atomically) modified when
-inserting or deleting fields/records. A tempfile will be written next to the
-input file (for example, with the name 'I<FILE>B<.tmp>'). Then, if the
-modification is successful the file will be is renamed to replace the old file.
-
 =item Add record sets B<%rec> (and B<%doc>)
 
 Implement B<recutils> 'record set' field B<%rec>. Record set name should
@@ -2531,11 +2581,6 @@ also only need one usage line instead of two.)
     zdb [OPTION]... [--] [QUERY] [FIELD=VALUE]... [FILE]
 
 =back
-
-=head2 File locking
-
-There should be some protection to avoid having multiple instances of B<zdb>
-trying to modify the same file at the same time.
 
 =head2 Undo
 
