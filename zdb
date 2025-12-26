@@ -10,7 +10,7 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.16';                        # https://semver.org/
+our $VERSION='0.8.17';                        # https://semver.org/
 our $VERSION_DATE='26 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -1668,9 +1668,12 @@ Display a lot of output. This is mostly intended for debugging while developing
 =head1 QUERIES
 
 B<zdb> uses a sloppy query language, inspired by web search engines. It strives
-to be terse, intuitive, expressive, and forgiving. Unmatched parentheses and
-quotes are fine (they will be terminated for you). Text in quotes is
-interpreted literally (special characters/operators lose their meaning).
+to be terse, intuitive, expressive, and forgiving. The "sloppy" part means that
+you don't have to care about matching parentheses and/or quotes (they will be
+terminated for you).
+
+Text in quotes is always interpreted literally (any special
+characters/operators lose their meaning if they occur within quotes).
 
 B<NOTE:> The shell processes its quotes before the arguments are ever seen by
 B<zdb>. This means that you have to quote your quotes! It's usually most
@@ -1678,7 +1681,7 @@ convenient to put single quotes around your whole query (these outer quotes
 eaten by the shell) and then use double quotes inside that if you need it. For
 example:
 
-    zdb 'name:("crew member",crewmember)' -fklingon.zdb
+    zdb 'name:("crew member",crewmember)' klingon.zdb
 
 Query is matched word-by-word (C<B<cat>> does not match "cats"). An (unquoted)
 asterisk (B<*>) may be used to match zero or more letters: C<B<cat*>> matches
@@ -1686,10 +1689,12 @@ both "cat" and "cats" and "catwoman"; C<B<*fix>> matches "fix", "prefix", and
 "suffix". An (unquoted) underscore (B<_>) can be used to match one or more
 whitespace characters (including newlines).
 
-Search is case-insensitive by default, except if I<QUERY> contains any
-uppercase letters, in which case the entire I<QUERY> is read as case-sensitive.
-(Options B<-S>/B<--smart-case> [default], B<-s>/B<--case-sensitive> and
-B<-i>/B<--ignore-case> change this behavior.)
+By default B<-S>/B<--smart-case> is used, meaning that if I<QUERY> contain any
+uppercase letters the entire query will match as if the
+B<-s>/B<--case-sensitive> option was in effect (that is, the casing in the
+query must match exactly for the query to match). If, on the other hand, all
+the letters in I<QUERY> are lowercase, then matching will proceed as if
+B<-i>/B<--ignore-case> was in effect (and case is ignored while matching).
 
 
 =head2 Logic operators
@@ -2179,6 +2184,8 @@ disabled with B<--no-color>. (2025-12-24 19:12--03:09, 2025-12-26 00:02--00:44)
 
 B<0.8.16> - Added lockfile and (atomic) file updates. (2025-12-26 00:45--08:41)
 
+B<0.8.17> - Updated docs. (2025-12-26 08:41--09:07)
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -2315,17 +2322,19 @@ right on: B<kitty>, B<linux> (= the Linux console), B<qterminal> and in B<tmux>
 
 =head2 Version 1.0
 
-B<Write to file> -- Adding fields to existing records; adding & deleting
+B<DONE> -- B<Write to file> -- Adding fields to existing records, and adding
 records. Should work in both 'filter mode' (input on STDIN, output on STDOUT)
 and as (atomic) writes to specified file. (Add new stuff at the end.)
 
-B<Case matching> -- Matching should obey case options B<--ignore-case> and
-B<--smart-case>. (Smart case being the default.)
+B<DONE> -- B<Case matching> -- Matching should obey case options
+B<--ignore-case> and B<--smart-case>. (Smart case being the default.)
 
 B<Fix query bugs> -- Missing leading parenthesis must work. Don't search
 comments (by default).
 
 =head2 Version 1.1
+
+B<Delete fields & records>.
 
 B<%fields> in database to specify sort order, and defining allowed field value
 content.
@@ -2345,14 +2354,15 @@ comments that will be fixed in the future as well.)
 
 =over 4
 
-=item Better word border detection
-
-When a word in a query begins/ends in a non-alphanumeric character, it
-shouldn't be expected to be at a word border (regex B<\b...\b>).
-
 =item Option to enable/disable diacritics
 
 Should make 'a' match 'ä'. (Related to/influenced by 'Field locale settings'?)
+
+=item Query prefix for case-sensitive matching
+
+The prefix C<B<^>> should be added. It should toggle exact case matching for
+any individual search term. Thus C<B<^Scandinavia>> can be used to specify that
+only the capitalized version of the word should be matched.
 
 =item B<BUG:> Fix implicit leading parentheses
 
