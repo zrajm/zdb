@@ -10,8 +10,8 @@ use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use charnames qw(:full :short);  # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.17';                        # https://semver.org/
-our $VERSION_DATE='26 December 2025';
+our $VERSION='0.8.18';                        # https://semver.org/
+our $VERSION_DATE='28 December 2025';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -206,23 +206,35 @@ sub highlight {
         };
         return bless($self, $class);
     }
+    sub duration {
+        my ($beg, $end) = @_;
+        my $dur = $end - $beg;
+        my %u = (y => 31536000, mo => 2592000, w => 604800,
+                 d => 86400, h => 3600, m => 60, s => 1);
+        my @r = map {
+            my $i = int($dur / $u{$_});
+            $dur %= $u{$_};
+            $i ? "$i$_" : ();
+        } qw(y mo w d h m s);
+        return join '', splice(@r, 0, 2);
+    }
     # Write a lockfile symlink with following data 'user@host.pid:epoch' and
     # erase the file when we go out of scope.
     sub _lock {
         my ($file) = @_;
-        my ($lock, $time, $host, $user) = (".$file.lock", time(), do {
-            open my $fh, '</etc/hostname'; <$fh> =~ /.*/; $&;
-        }, (getpwuid($<) // ''));
+        use Sys::Hostname;
+        my ($lock, $time, $host, $user)
+            = (".$file.lock", time(), hostname(), (getpwuid($<) // ''));
         symlink("$user\@$host.$$:$time", $lock)
-            or die "Cannot lock file '$file': Lock held by other process\n" . do {
+            or die "Cannot create lockfile '$lock': Already exists\n" . do {
                 my ($user, $host, $pid, $time) = (readlink($lock) // '')
                     =~ /^([^@]*)@(.*)\.(\d*):(\d*)$/;
                 my $info = join ', ', grep { $_ }
-                    $user && "by user $user",
-                    $host && "on host $host",
                     $pid  && "process $pid",
-                    $time && "on " . localtime($time);
-                $info && "    ($info)\n";
+                    $user && "user $user",
+                    $host && "host $host",
+                    $time && "age " . duration($time, time());
+                    $info && "    (Lock created by: $info.)\n";
             };
         return $lock;
     }
@@ -2186,6 +2198,9 @@ B<0.8.16> - Added lockfile and (atomic) file updates. (2025-12-26 00:45--08:41)
 
 B<0.8.17> - Updated docs. (2025-12-26 08:41--09:07)
 
+B<0.8.18> - Better getting of and better error message when file is locked.
+(2025-12-28 00:32--02:15)
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -2425,6 +2440,8 @@ query looks like after the shell has stripped its quoting? Both?
 
 =item Add unit tests for highlight()
 
+=item Unit tests for file locking
+
 =item Terminfo/termcap
 
 Should look at terminfo (or whatever is needed) to determine what highlight to
@@ -2546,6 +2563,10 @@ similar for checking the whole database?)
 =over 4
 
 =item Warn when I<QUERY> is empty?
+
+=item Ctrl-C should work
+
+Should transparently kill pager and remove any created lockfile.
 
 =item Suppression of lengthy output
 
