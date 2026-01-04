@@ -2,16 +2,16 @@
 
 # https://perl.com/pub/2012/04/perlunicook-standard-preamble.html
 use utf8;      # so literals and identifiers can be in UTF-8
-use v5.12;     # or later to get "unicode_strings" feature
+use v5.14;     # for locale sorting and "unicode_strings" feature
 use strict;    # quote strings, declare variables
 use warnings;  # on by default
-use warnings  qw(FATAL utf8);    # fatalize encoding glitches
-use open      qw(:std :utf8);    # undeclared streams in UTF-8
-use charnames qw(:full :short);  # unneeded in v5.16
+use warnings  qw(FATAL utf8);            # fatalize encoding glitches
+use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
+use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.18';                        # https://semver.org/
-our $VERSION_DATE='28 December 2025';
+our $VERSION='0.8.19';                         # https://semver.org/
+our $VERSION_DATE='4 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -1936,7 +1936,7 @@ matches are presumably pretty rare anyways.)
 
 =head1 AUTHOR
 
-Copyright (C) 1998--2025 zrajm <zrajm@klingonska.org>.
+Copyright (C) 1998--2026 zrajm <zrajm@klingonska.org>.
 
 
 =head1 HISTORY
@@ -2201,11 +2201,13 @@ B<0.8.17> - Updated docs. (2025-12-26 08:41--09:07)
 B<0.8.18> - Better getting of and better error message when file is locked.
 (2025-12-28 00:32--02:15)
 
+B<0.8.19> - Updated Perl preamble & copyright year. (2026-01-04 19:29--19:31)
+
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2025, zrajm L<zrajm@klingonska.org>. ZDB file format copyright
-1998--2025 by zrajm and Klingonska Akademien (Uppsala, Sweden).
+Copyright 2025--2026, zrajm L<zrajm@klingonska.org>. ZDB file format copyright
+1998--2026 by zrajm and Klingonska Akademien (Uppsala, Sweden).
 L<https://klingonska.org>.
 
 License GPLv2: GNU General Public License version 2 or later
