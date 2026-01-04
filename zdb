@@ -10,7 +10,7 @@ use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
 use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.20';                         # https://semver.org/
+our $VERSION='0.8.21';                         # https://semver.org/
 our $VERSION_DATE='4 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -19,9 +19,9 @@ Usage: $PROGRAM [OPTION]... [--] [QUERY] [FIELD=VALUE]... [FILE]
 Search or update/add records in a ZDB text file database.
 
   -s, --case-sensitive    Do not ignore case when searching
-      --color[=WHEN]      When to highlight matches (default 'auto')
-                          WHEN is 'auto', 'always' or 'never'
   -c, --color             Always highlight matches (means --color=always)
+      --color=WHEN        When to highlight matches (default 'auto')
+                          WHEN is 'auto', 'always' or 'never'
   -C, --no-color          Never highlight matches (means --color=never)
   -e, --match=QUERY       Specify QUERY explicitly (usually omitted)
   -h, --help              Show this help and exit
@@ -29,8 +29,8 @@ Search or update/add records in a ZDB text file database.
   -i, --ignore-case       Ignore case when searching
   -M, --manual            Show zdb manual page (with 'man')
       --pager=CMD         Use CMD as pager (default 'pager')
-      --paging[=WHEN]     When to use pager (default 'auto')
   -p, --paging            Always use pager (means --paging=always)
+      --paging=WHEN       When to use pager (default 'auto')
   -P, --no-paging         Never use pager (means --paging=never)
   -S, --smart-case        Ignore case if entire QUERY is lowercase (default)
       --test              Run built-in unit tests
@@ -1513,7 +1513,7 @@ B<--case-sensitive> is easier to understand than the negated
 B<-I>/B<--no-ignore-case> and B<--no-smart-case> (though the latter two exist
 for compatibility in B<zdb>).
 
-=item B<--color>[B<=>I<WHEN>], B<--colour>[B<=>I<WHEN>] (default B<auto>)
+=item B<--color>B<=>I<WHEN>, B<--colour>B<=>I<WHEN> (default B<auto>)
 
 When to highlight search matches in the output.
 
@@ -1532,16 +1532,16 @@ piped the output to another command (S<C<| CMD>>) or directed it to a file
 
 =back
 
-Using B<--color> (without I<WHEN>) means B<--color=always>; omitting the option
-altogether means B<--color=auto> (also see B<-c> and B<-C>). (Option inspired
-by B<grep>/B<ls>, borrowing the semantics from B<ls>, that is, using option
-without arg means B<--color=always>, and I<WHEN> values B<yes>/B<force>,
-B<no>/B<none> and B<tty>/B<if-tty> are only supported by B<ls>, not B<grep>.)
+See also B<-c>/B<--color> (without C<=I<WHEN>>), and B<-C>/B<--no-color>,
+below. (The option name is inspired by B<grep> and B<ls>, borrowing semantics
+from B<ls>, that is, using option without arg means B<--color=always>, and the
+I<WHEN> values B<yes>/B<force>, B<no>/B<none> and B<tty>/B<if-tty> are only
+supported by B<ls>, not B<grep>.)
 
 =item B<-c>, B<--color>, B<--colour>
 
-Enable highlighting. Short for B<--color=always>. (Using B<--color> is the same
-as B<--color>[B<=>I<WHEN>] without specifying the I<WHEN> argument.)
+Enable highlighting. Short for B<--color=always>. (See also B<--color>=I<WHEN>,
+above.)
 
 =item B<-C>, B<--no-color>, B<--no-colour>
 
@@ -1626,19 +1626,20 @@ B<-F> (exit immediately if output fits on screen), B<-X> (disable screen
 clearing on exit on some terminals), and B<-i> (turn off case-insensitivity
 when searching in B<less>).
 
-=item B<--paging>[B<=>I<WHEN>] (default B<auto>)
+=item B<--paging>B<=>I<WHEN> (default B<auto>)
 
 When to use a pager for the output.
 
-I<WHEN> may be: B<auto>, B<always> or B<never> (and works the same as for
-B<--color>). Using B<--paging> (without I<WHEN>) means B<--paging=always>; not
-using B<--paging> means B<--paging=auto> (also see B<--pager=>I<CMD>, B<-p> and
-B<-P>). (Option inspired by B<bat>/B<delta>.)
+I<WHEN> may be: B<auto>, B<always> or B<never> (same as for B<--color>).
+
+See also B<-p>/B<--paging> (without C<=I<WHEN>>), and B<-P>/B<--no-paging>,
+below, and B<--pager=>I<CMD>, above. (Option name inspired by B<bat> and
+B<delta>.)
 
 =item B<-p>, B<--paging>
 
-Always use pager. Short for B<--paging=always>. (Using B<--paging> is the same
-as B<--paging>[B<=>I<WHEN>] without specifying the I<WHEN> argument.)
+Always use pager. Short for B<--paging=always>. (See also B<--color>=I<WHEN>,
+above.)
 
 =item B<-P>, B<--no-paging>
 
@@ -2229,6 +2230,9 @@ B<0.8.19> - Updated Perl preamble & copyright year. (2026-01-04 19:29--19:31)
 
 B<0.8.20> - Clarified info & case options, added B<--> description. (2026-01-04
 21:05--22:10)
+
+B<0.8.21> - Clarified usage of I<WHEN> optarg for B<--color> and B<--paging>.
+(2026-01-04 22:10--22:30)
 
 
 =head1 COPYRIGHT AND LICENSE
