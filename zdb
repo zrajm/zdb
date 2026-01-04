@@ -10,7 +10,7 @@ use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
 use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.19';                         # https://semver.org/
+our $VERSION='0.8.20';                         # https://semver.org/
 our $VERSION_DATE='4 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -1501,14 +1501,17 @@ I<FIELD>B<=>I<VALUE> arguments are provided:
 
 =item B<-s>, B<--case-sensitive>
 
-Perform case-sensitive search. This option overrides B<-S>/B<--smart-case>
-(default) and B<-i>/B<--ignore-case>.
+Perform case-sensitive search.
 
-B<RATIONALE:> These option names (both long & short), are only used by a few of
-the programs I've taken inspiration from: B<ag> (The Silver Searcher) and B<rg>
-(ripgrep). However, the non-negated B<--case-sensitive> is clearer in intent
-than negated B<-I>/B<--no-ignore-case> and B<--no-smart-case> (all of these
-options have the same effect in B<zdb>).
+Case options (B<-s>/B<--case-sensitive>, B<-i>/B<--ignore-case>,
+B<-S>/B<--smart-case>, and aliases) specify how case is matched. They override
+each another, the last one on the command line takes precedence.
+
+These long option & shortopt names are only used by a few B<grep> spinoffs:
+B<ag> (The Silver Searcher) and B<rg> (ripgrep). However, the non-negated
+B<--case-sensitive> is easier to understand than the negated
+B<-I>/B<--no-ignore-case> and B<--no-smart-case> (though the latter two exist
+for compatibility in B<zdb>).
 
 =item B<--color>[B<=>I<WHEN>], B<--colour>[B<=>I<WHEN>] (default B<auto>)
 
@@ -1560,29 +1563,39 @@ a record will be considered matching if one (or more) of the I<QUERY>(s) match.
 
 Output a usage message and exit.
 
+The info options (B<-h>/B<--help>, B<--help-query> and B<--version>) cause
+B<zdb> to ignore all other command line arguments (except invalid options still
+cause an error). The last info option on the command line specify which info to
+show.
+
 =item B<--help-query>
 
 Display a cheat sheet for the QUERY syntax. (See also L</QUERIES> below).
 
+The info options (B<-h>/B<--help>, B<--help-query> and B<--version>) cause
+B<zdb> to ignore all other command line arguments (except invalid options still
+cause an error). The last info option on the command line specify which info to
+show.
+
 =item B<-i>, B<--ignore-case>
 
-Ignore all case distinctions in I<QUERY>. This option overrides
-B<-S>/B<--smart-case> (default) and B<-s>/B<--case-sensitive>.
+Ignore case distinctions when searching.
 
-B<RATIONALE:> These option names (both long & short), are used by the original
-B<grep>, and is supported by B<all> the search programs I've looked at: B<ag>
-(The Silver Searcher), B<git grep>, B<grep>, B<pt> (The Platinum Searcher),
-B<rg> (ripgrep), B<sift>, and B<ucg> (UniversalCodeGrep).
+Case options (B<-s>/B<--case-sensitive>, B<-i>/B<--ignore-case>,
+B<-S>/B<--smart-case>, and aliases) specify how case is matched. They override
+each another, the last one on the command line takes precedence.
+
+Both long option & shortopt names are used by the original B<grep>, and all
+B<grep> spinoffs I've seen: B<ag> (The Silver Searcher), B<git grep>, B<grep>,
+B<pt> (The Platinum Searcher), B<rg> (ripgrep), B<sift>, and B<ucg>
+(UniversalCodeGrep).
 
 =item B<-I>, B<--no-ignore-case>
 
-The opposite of B<-i>/B<--ignore-case>. This is an alias for
-B<-s>/B<--case-sensitive> (which is clearer in its meaning).
+Alias for B<-s>/B<--case-sensitive>. Exists only for compatibility.
 
-B<RATIONALE:> These option names (both long & short) exists for consistency
-with grep B<grep>, it is actually an alias for B<-s>/B<--case-sensitive> (which
-is clearer in meaning). The long option name is used by B<ack>, B<grep>, and
-B<sift>, and the shortopt B<-I> is used by B<ack> and B<sift>.
+Long option name is used by B<grep>, B<ack>, and B<sift>, while shortopt B<-I>
+is used by B<ack> and B<sift>.
 
 =item B<-M>, B<--man>, B<--manual>
 
@@ -1635,23 +1648,24 @@ though B<--no-paging> is unique to B<zdb>.)
 =item B<-S>, B<--smart-case> (default)
 
 Make case-insensitive search, unless there are one or more uppercase characters
-in I<QUERY>, in which case the whole query will be case-sensitive. This option
-overrides B<-s>/B<--case-sensitive> and B<-i>/B<--ignore-case>.
+in I<QUERY>, in which case the whole query will be case-sensitive.
 
-B<RATIONALE:> The same long option name is used by B<ack>, B<ag> (The Silver
-Searcher), B<pt> (The Platinum Searcher), B<rg> (ripgrep), B<sift>, and B<ucg>
-(UniversalCodeGrep), and the shortopt is used by B<ack>, B<ag>, B<pt>, B<rg>.
+Case options (B<-s>/B<--case-sensitive>, B<-i>/B<--ignore-case>,
+B<-S>/B<--smart-case>, and aliases) specify how case is matched. They override
+each another, the last one on the command line takes precedence.
+
+Long option name is used by B<ack>, B<ag> (The Silver Searcher), B<pt> (The
+Platinum Searcher), B<rg> (ripgrep), B<sift>, and B<ucg> (UniversalCodeGrep),
+while shortopt is used by B<ack>, B<ag>, B<pt>, B<rg>.
 
 =item B<--no-smart-case>
 
-The opposite of B<-S>/B<--smart-case>. This is an alias for
-B<-s>/B<--case-sensitive> (which is clearer in its meaning).
+Alias for B<-s>/B<--case-sensitive>. Exists only for compatibility.
 
-B<RATIONALE:> The long option name exists for consistency with B<ack>, and
-B<sift> (while B<ucg> (UniversalCodeGrep) uses the similarly named
-B<--nosmart-case>---an abomination not supported by B<zdb>). B<sift> uses the
-shortopt B<-S> for this meaning, but B<zdb> follows the majority and uses B<-S>
-to mean B<--smart-case>.
+Long option name is used by B<ack>, and B<sift> (B<ucg> [UniversalCodeGrep]
+uses the similar name B<--nosmart-case>). There's no shortopt for this alias
+(B<sift> is the only tool to use B<-S> for this option, while all other tools,
+including B<zdb>, use B<-S> to mean B<--smart-case>).
 
 =item B<--test>
 
@@ -1669,10 +1683,20 @@ tests passed.
 
 Output version information and exit.
 
+The info options (B<-h>/B<--help>, B<--help-query> and B<--version>) cause
+B<zdb> to ignore all other command line arguments (except invalid options still
+cause an error). The last info option on the command line specify which info to
+show.
+
 =item B<-v>, B<--verbose>
 
 Display a lot of output. This is mostly intended for debugging while developing
 (so far anyway). Do not assume that this option will continue existing.
+
+=item B<-->
+
+Signal end of options. This allows arguments after C<B<-->> to start with
+C<B<->>. This follows a convention given by the POSIX standard.
 
 =back
 
@@ -2203,6 +2227,9 @@ B<0.8.18> - Better getting of and better error message when file is locked.
 
 B<0.8.19> - Updated Perl preamble & copyright year. (2026-01-04 19:29--19:31)
 
+B<0.8.20> - Clarified info & case options, added B<--> description. (2026-01-04
+21:05--22:10)
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -2374,6 +2401,9 @@ comments that will be fixed in the future as well.)
 =item Option to enable/disable diacritics
 
 Should make 'a' match 'ä'. (Related to/influenced by 'Field locale settings'?)
+
+See Perl Cookbook, chapter "Unicode Normalization".
+https://perl.com/pub/2012/05/perlunicookbook-unicode-normalization.html
 
 =item Query prefix for case-sensitive matching
 
@@ -2548,6 +2578,9 @@ interleaved fields of different names, the internal order between fields of the
 same name should be retained (but the different field names should no longer be
 interleaved) after sorting.
 
+See Perl Cookbook, chapter "Demo of Unicode Collation and Printing".
+https://perl.com/pub/2012/06/perlunicook-demo-of-unicode-collation-and-printing.html
+
 =item Field types and field verification
 
 B<recutils> uses B<%type> and B<%typedef> for this purpose. Also the fields
@@ -2563,6 +2596,14 @@ similar for checking the whole database?)
 =head2 Command behavior
 
 =over 4
+
+=item Command exit status
+
+Implement & document exit status. Should be 0 if there were matches, 1 if there
+were no matches, 2 for usage errors (incorrect syntax/unknown options etc.), 3
+for write/lock errors. (Check that this is common convention for exit codes
+>1.) -- C<man grep> has a section called 'EXIT STATUS', should we use that here
+too?
 
 =item Warn when I<QUERY> is empty?
 
