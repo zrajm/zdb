@@ -10,8 +10,8 @@ use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
 use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.21';                         # https://semver.org/
-our $VERSION_DATE='4 January 2026';
+our $VERSION='0.8.22';                         # https://semver.org/
+our $VERSION_DATE='5 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -1312,8 +1312,9 @@ local %SIG = (
         die @_ if $^S;                         # abort if called inside eval
         # Perl can insert 'at FILE line NUM.': Don't add tips for that.
         my $tip = (my $msg = "@_") =~ s/(?<!\d)\.$//; # ends in '.' = show tip
-        die("$PROGRAM: $msg",
+        warn ("$msg",
             $tip ? "Try '$PROGRAM --help' for more information.\n" : ());
+        exit ($tip ? 2 : 3);
     });
 
 my (@arg, @query);
@@ -1815,9 +1816,37 @@ C<phaser_pistol> will match even if there's a newline between the words (while
 C<"phase pistol"> will match only if the words are separated by a single space).
 
 
-=head1 RETURN VALUE
+=head1 EXIT STATUS
 
-FIXME
+=over 5
+
+=item B<0>
+
+Matches found. Searched and found match, successfully inserted/updated record or
+field, or successfully displayed database summary. (Depending on which mode
+B<zsh> ran in.)
+
+=item B<1>
+
+No match found. Attempted to perform search, database insert/update, or
+displaying database summary, but the operation failed to return a result. There
+were no (or too many) matching records.
+
+=item B<2>
+
+Usage error. Errors found during initial argument parsing, which are the result
+of the user error. For example, giving an unknown option or option argument,
+specifying a non-existing filename, or using the C<B<->> option without
+providing data on standard input. (These errors are also given the "Try 'zdb
+--help' for more information" tip.)
+
+=item B<3>
+
+Operation failure. Errors found during processing. These resulted from a valid
+command invocation that encountered some later error, such as failing to obtain
+a file lock, or failing to write to file.
+
+=back
 
 
 =head1 DIAGNOSTICS
@@ -2234,6 +2263,8 @@ B<0.8.20> - Clarified info & case options, added B<--> description. (2026-01-04
 B<0.8.21> - Clarified usage of I<WHEN> optarg for B<--color> and B<--paging>.
 (2026-01-04 22:10--22:30)
 
+B<0.8.22> - Implemented exit status for errors. (2026-01-05 12:32--13:13)
+
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -2600,14 +2631,6 @@ similar for checking the whole database?)
 =head2 Command behavior
 
 =over 4
-
-=item Command exit status
-
-Implement & document exit status. Should be 0 if there were matches, 1 if there
-were no matches, 2 for usage errors (incorrect syntax/unknown options etc.), 3
-for write/lock errors. (Check that this is common convention for exit codes
->1.) -- C<man grep> has a section called 'EXIT STATUS', should we use that here
-too?
 
 =item Warn when I<QUERY> is empty?
 
