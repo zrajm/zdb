@@ -23,7 +23,7 @@ contexts:
       push: field-value
 
     # Field names starting with other chars
-    - match: ^([A-Za-z_][A-Za-z0-9_]*)([ \t]+.*)?
+    - match: ^((?![0-9])[A-Za-z0-9_]+)([ \t]+.*)?
       captures:
         1: entity.name.function.zdb
         2: string.unquoted.zdb
