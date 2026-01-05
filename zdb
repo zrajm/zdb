@@ -10,7 +10,7 @@ use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
 use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.24';                         # https://semver.org/
+our $VERSION='0.8.25';                         # https://semver.org/
 our $VERSION_DATE='5 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -2638,6 +2638,9 @@ B<0.8.23> - Rewrote/clarified some stuff in L</OPTIONS> section. (2026-01-05
 
 B<0.8.24> - Reordered manpage sections. (2026-01-05 14:49--15:12)
 
+B<0.8.25> - Updated L</EXAMPLES> and L</RESTRICTIONS>. (2026-01-05
+15:12--15:48)
+
 
 =head1 INTERNALS
 
@@ -2780,14 +2783,36 @@ FIXME
 
 =head1 RESTRICTIONS
 
-Only two different colors are used when highlighting found matches. This means
-that if multiple search terms overlap, the color intensity will only ever
-accurately reflect one or two overlapping matches. The color will not increase
-beyond that. This is not expected to change in the future. (As overlapping
-matches are presumably pretty rare anyways.)
+Highlighting of matches is limited in cases where there is overlap. By default
+blue background is used to highlight matches, where there is an overlap a teal
+background is used, and in cases of three overlaps, white. Background color
+intensity will not increase beyond that.
 
 
 =head1 EXAMPLES
+
+The following command (which does not contain a search query) will create a new
+record with fields C<name> and C<age> (containing 'Nomi Marks' and '29'
+respectively) in the file F<contacts.zdb>.
+
+   zdb name='Nomi Marks' age=29 contacts.zdb
+
+The following will search for any record containing both 'Nomi' and 'Marks' (in
+any field) in the file F<contacts.zdb> (since both 'Nomi' and 'Marks' are
+capitalized, the search for each of these words will be case-sensitive). The
+matching record will be displayed, with the words 'Nomi' and 'Marks'
+highlighted.
+
+   zdb 'Nomi Marks' contacts.zdb
+
+The following performs the same search as above, but instead of showing the
+result, the fields C<city> and C<state> (with the values "San Francisco" and
+"California") are inserted into the matching record. If more than one record
+(or no records at all) matches the query, the command will abort with an error
+message (without modifying F<contacts.zdb>).
+
+   zdb 'Nomi Marks' city="San Francisco" state=California contacts.zdb
+
 
 =head2 'Self-searchable' ZDB databases
 
