@@ -10,7 +10,7 @@ use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
 use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.23';                         # https://semver.org/
+our $VERSION='0.8.24';                         # https://semver.org/
 our $VERSION_DATE='5 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -1885,67 +1885,6 @@ inside the B<zdb> source code itself (and is fairly readable).
 =back
 
 
-=head1 TAB COMPLETION
-
-This is how to set up tab completion for B<zdb>. I've only listed how to do it
-for B<zsh> since that's the shell I'm using. Feel free to contribute
-suggestions for other shells!
-
-=head2 Tab completion for Zsh
-
-To get autocompletion of B<zdb> options in B<zsh>, create a file called F<_zdb>
-(with an initial '_'!) in the whatever directory your instance of B<zsh> keeps
-its autocompletion functions.
-
-    #compdef zdb
-    _arguments \
-      '--color=[When to use colors]:WHEN:(always auto never)' \
-      '--paging=[When to use paging]:WHEN:(always auto never)' \
-      '*: :_gnu_generic'
-
-This directory will be one of the directories in the B<$FPATH> environment
-variable, to list them all in an easily readable fashion, use:
-
-    echo ${(F)fpath}
-
-This autocompletion function should actually allow any arbitrary command (with
-options) to be entered as an argument for B<--pager>, and I should also like a
-little query language cheatsheet to be displayed when tab is pressed in a query
-position (that is, as the first arg, or as an argument to B<--e>/B<--match>.
-
-
-=head1 EXAMPLES
-
-=head2 'Self-searchable' ZDB databases
-
-One may create 'self-searchable' ZDB database, which can be invoked by using
-the database file itself as a command. For example, my Klingon dictionary is
-called F<klingon.zdb>, and to search for the word 'phaser' I can simply write:
-
-     ./klingon.zdb phaser
-
-To achieve this, a (relatively complicated) shebang (C<#!>) line needs to be
-added to the top of the database file. This shebang invokes B<zdb>, and
-rearranges the arguments so that name of the database file occurs last in the
-command. The following B<shebang> can be used:
-
-    #!/usr/bin/env -S sh -c 'exec zdb "$@" "$0"'
-
-For the above to work B<zdb> needs to be somewhere in your B<$PATH>.
-
-As the shebang command is invoked, the first argument (B<$0>) is the name of
-the B<zdb> database file (in which the shebang line is found). If we did not
-invoke B<sh> to flip the arguments around, B<$0> would have been given as the
-first argument (which would've caused B<zdb> to throw an error).
-
-The database file also needs to be executable for this to work.
-
-    chmod +x ZDBFILE
-
-Now, 'executing' the database will pass all arguments given as-is to B<zdb>,
-with the name of the database file tucked onto the end of the command line.
-
-
 =head1 ENVIRONMENT
 
 =over 7
@@ -1982,432 +1921,6 @@ in-place. This is done using atomic updates (output is written to a tempfile,
 called C<B<.>I<FILE>B<.tmp>>, and after a successful write, it is renamed to
 replace the old file). A lockfile is also used, and B<zdb> will refuse to
 modify a database that is currently being modified by another B<zdb> instance.
-
-
-=head1 CAVEATS
-
-FIXME
-
-
-=head1 RESTRICTIONS
-
-Only two different colors are used when highlighting found matches. This means
-that if multiple search terms overlap, the color intensity will only ever
-accurately reflect one or two overlapping matches. The color will not increase
-beyond that. This is not expected to change in the future. (As overlapping
-matches are presumably pretty rare anyways.)
-
-
-=head1 AUTHOR
-
-Copyright (C) 1998--2026 zrajm <zrajm@klingonska.org>.
-
-
-=head1 HISTORY
-
-B<v0.0.1> - Primitive initial functionality. Output a ZDB file (given a ZDB
-file on standard input), and split the file into records internally while
-preserving whitespace between records (and at the beginning & ending of file).
-(2025-11-11 00:51--06:50, 15:26--21:32; 2025-11-12 00:04--02:20)
-
-B<v0.1.0> - Defined internal query format, and internal data format. File now
-loads into the new format loading. Implemented search (using a simple hardcoded
-query). Added highlighting of search result (including overlapping matches).
-(2025-11-11 15:26--16:11, 19:45--21:31; 2025-11-12 00:04--03:28, 05:02--07:12;
-2025-11-14 01:03--06:30, 18:10--11:42)
-
-B<v0.1.1> - Documented internals somewhat. (2025-11-14 11:42--12:22)
-
-B<v0.2.0> - Added B<--pager> and B<--manpage> options. Pager defaults to
-whatever is specified in the $PAGER environment variable (defaulting to
-B<less>). B<--manpage> option shows simple documentation (not yet manpage
-formatted, but its *something*). Also removed the command line options
-B<--help-internals> and B<--todo> as this info is now part of the manpage
-instead. (2025-11-15 15:33--17:06)
-
-B<v0.3.0> - Pager now defaults to B<pager> (instead of B<less>). Better
-suppression of pager (or, in the case of B<--manpage>, manpager) when there are
-errors. Extensive rewrite of docs. (2025-11-16 00:06--04:39, 23:18--02:27;
-2025-11-17 04:29--08:10, 14:13--17:07)
-
-B<v0.3.1> - Moved query parsing and matching into Query module. (2025-11-17,
-18:53--19:23)
-
-B<v0.3.2> - Now gets QUERY from command line arguments. Very basic, all
-arguments are simply AND:ed, and each pattern is expected to match a whole word
-(with no wildcards or anything). (2025-11-18 19:26--19:39)
-
-B<v0.3.3> - Added B<--paging> option. (2025-11-18 19:39--21:21)
-
-B<v0.3.4> - Tested/verified and documented the B<$PAGER> and B<--pager=>I<CMD>
-capabilities. (Yes, Perl allows more complex commands to be used.) (2025-11-18
-21:21--21:42)
-
-B<v0.4.0> - Added B<ZDBPAGER> for B<zdb>-specific pager defaults. (2025-11-19
-00:04--01:01)
-
-B<v0.4.1> - Moved unit tests into Query module. (2025-11-19 02:28--02:41)
-
-B<v0.4.2> - Now use Test::More for unit tests in Query module. (2025-11-19
-02:41--03:20)
-
-B<v0.4.3> - Updated manpage. Added description of how to use B<zdb> as a
-shebang. Made sure manpage includes all required headlines. Added notes on
-L</FILES> and L</RESTRICTIONS>. (2025-11-20 07:31--09:08)
-
-B<v0.4.4> - Updated manpage with ideas for future. (2025-11-23 11:18--13:44)
-
-B<v0.5.0> - Renamed B<--manpage> option to B<--manual> (and added the short
-option B<-M>). The new option names are the same as those used by the B<curl>
-command. Unfortunately, almost no other commands seem to provide a flag to show
-their B<man> page, so it isn't very easy to find an intuitive option name to
-use. :( (2025-11-23 13:44--13:58)
-
-B<v0.5.1> - Expanded manpage. Improved chapters DESCRIPTION, QUERIES
-(subchapters 'Logic Operators', 'Field Prefixes' and 'Quoting'). Added and
-clarified a buncha stuff on the L</FUTURE> wishlist. (2025-11-25 08:49--11:29)
-
-B<v0.5.2> - Moved C<< END {} >> block to after info variables. (2025-11-25
-12:31--12:36)
-
-B<v0.6.0> - Added B<-e>/B<--match> option and removed B<-f>/B<--file> option.
-B<--file> was used to specify a database input file (mentioned as being
-inspired by B<grep>'s option of the same name) but B<grep> actually uses that
-option to specify a file of B<match patterns>, not data! This update brings the
-options in line with how B<grep>, B<sed> and B<awk> (actually) works.
-(2025-11-25 02:14--04:57, 11:37--12:56, 17:29--18:01; 2025-11-26 15:08--15:59)
-
-B<v0.6.1> - Support for '-' argument. QUERY argument now mandatory (until
-implementing L</No QUERY = Show database status>). Also updated usage string to
-reflect this. (2025-11-26 15:59--17:37)
-
-B<v0.6.2> - Documentation proofreading & fixes. (2025-11-26 18:46--18:59)
-
-B<v0.6.3> - Additional manpage spellfixes. (2025-11-26 18:59--19:20)
-
-B<v0.6.4> - Corrected B</bin/env> -> B</usr/bin/env>. (2025-11-26 19:20--19:23)
-
-B<v0.6.5> - Added note about hierarchical fields to L</FUTURE>. (2025-11-29
-00:13--00:25)
-
-B<v0.7.0> - Added some preliminary query parsing and started working on tests
-for the same. Code is currently in a non-functional state, as the PARSING is
-approaching done, but generating the query function from the parse tree remains
-to do be done. Also, the internal representation of the parse tree will most
-likely change. (2025-11-28 18:30--13:45)
-
-B<v0.7.1> - Added tests for C<Query::_parse()>, and got the 'bottomless' stack
-feature to work (meaning that unmatched ')' in the syntax query now works too).
-(2025-11-30 13:20--14:11, 20:20--22:12; 2025-12-01 08:16--10:40, 11:21--13:50,
-15:50--16:48, 23:03--23:34)
-
-B<v0.7.2> - Test callback function now declared using C<sub {}>. (2025-12-01
-23:42--23:50)
-
-B<v0.7.3> - Remove use of 'plain' object property when parsing (& testing)
-query. (Now use only the '_word' property which is split into individual
-chars.) (2025-12-01 23:54--23:57)
-
-B<v0.7.4> - Very minor cleanup. (2025-12-02 08:43--08:56)
-
-B<v0.7.5> - Moved some parsing logic into Query::Stack. (2025-12-02
-09:15--09:52)
-
-B<v0.7.6> - Made finite state machine shorter/more readable. Added a test for
-double parentheses. (2025-12-02 10:02--10:06)
-
-B<v0.7.7> - Simplify query during parsing by trimming empty words. (2025-12-02
-11:34--13:44)
-
-B<v0.7.8> - BUGFIX: Honor quotes in query + test cases for that + other small
-fixes. (2025-12-02 13:51--14:20)
-
-B<v0.7.9> - Removed 'or' field from stack items, and added 'type' = 'word' for
-word items (now relying on 'type' = 'and', 'or', 'nor' or 'word'). (2025-12-02
-16:05--17:25)
-
-B<v0.7.10> - Changed internal format. Search words are now also (just like
-parentheses) stored as arrayrefs, where first element is a metadata hashref.
-(2025-12-02 17:58--18:42, 21:12--22:30)
-
-B<v0.7.11> - Renamed a B<Query::Stack> function. Documented the future of the
-query parsing. (2025-12-02 22:38--22:58)
-
-B<v0.7.12> - Removed unused query cleanup function. (2025-12-03 08:04--08:12)
-
-B<v0.7.13> - Now removes empty terms in QUERY during parsing. This continually
-cleans up both empty search words (which are inserted as part of the query
-parsing itself) and empty parentheses as the query is being parsed. (2025-12-03
-08:12--09:20)
-
-B<v0.7.14> - Slightly different syntax for unit tests involving 'not' (B<->)
-and 'field' (B<=>) prefixes. (2025-12-03 09:45--10:05)
-
-B<v0.7.15> - Slight change in debug output. No longer using 'nor' for negative
-OR parentheses, but instead prefixing parentheses B<-> and B<=> for negated and
-field matching. (2025-12-03 10:14--11:40)
-
-B<v0.7.16> - Now removes any parenthesis in QUERY that wrap a single term. Term
-inside is kept, and the 'not' and 'field' attributes of the removed parenthesis
-and the term are combined. (2025-12-03 17:31--21:54)
-
-B<v0.7.17> - Prettier B<--test> output. (2025-12-03 23:46--00:51)
-
-B<v0.7.18> - Added a slew of unit tests. Unit tests were taken from my online
-Swedish Sign Language dictionary, which implement a very similar (sloppy) query
-language (L<https://zrajm.org/teckentranskription/lexicon-tests.html>).
-(2025-12-04 07:50--12:14)
-
-B<v0.7.19> - Implemented query B<Query::_normalize()>, which moves query
-prefixes C<B<->> and C<B<=>> to the leaf nodes of the query, applying De
-Morgan's Law. This makes sure that match highlighting works, by no query term
-negated more than once. Also added the tests required to test the new function,
-and adapted the test functions for this. (2025-12-04 00:56--01:49,
-17:24--17:51, 18:06--18:23; 2025-12-05 09:05--12:39)
-
-B<v0.7.20> - Prettified this L</HISTORY> section. (2025-12-05 12:42--13:16)
-
-B<v0.7.21> - Implemented rudimentary B<Query::_compile()> function. QUERY is
-now used for actual searching of database. (2025-12-05 14:15--15:56; 2025-12-06
-02:18--03:47)
-
-B<v0.7.22> - Cleanup of unused code. (2025-12-06 04:38--04:50)
-
-B<v0.7.23> - Minor change in argument parsing. (2025-12-07 20:44--21:01)
-
-B<v0.7.24> - QUERY prefixes C<B<->> and C<B<=>> now work in search. (2025-12-07
-21:01--22:19)
-
-B<v0.7.25> - Added query compilation 'lang' argument for specifying which
-functions to use for AND/OR and string matching in the finalized query. The
-purpose of these is to be able to provide alternate functions, e.g. for
-producing highlighted output, for dumping the query in cleaned up form.
-(2025-12-07 22:19--22:48)
-
-B<v0.7.26> - Renamed query type C<word> to C<atom>. (2025-12-07 22:48--23:06)
-
-B<v0.7.27> - Minor docs update on internal structure. (2025-12-07 23:06--23:21)
-
-B<v0.7.28> - Simplified B<Query::_compile()>. (2025-12-07 23:23--23:31)
-
-B<v0.7.29> - Implemented query dump output. (2025-12-07 23:33--00:16)
-
-B<v0.7.30> - Command exit code was always 255, this fixes that. (2025-12-09
-13:20--13:34)
-
-B<v0.7.31> - Added options B<--no-color> and B<--no-paging> and updated
-relevant documentation. (2025-12-11 20:38--21:10)
-
-B<v0.8.0> - Added highlighting of matching strings, and also added unit tests
-for all the new functions related to this, as well unit tests for the older
-matching logic. (2025-12-08 01:20--02:16, 14:15--17:03, 17:49--18:51,
-2025-12-09 12:27--13:00, 15:09--15:29, 20:24--00:20 2025-12-10 14:27--16:29,
-17:05--19:23 2025-12-11 14:10--14:48, 16:13--17:04, 18:57--19:33, 2025-12-12
-22:01--22:24, 2025-12-13 02:39--03:07, 12:06--12:39, 12:52--13:11, 2025-12-14
-00:58--01:54, 02:19--04:01)
-
-B<v0.8.1> - Search now highlighting disabled now works (again). This involved
-making the _matcher() functions return true/false even in list context. Updated
-unit tests accordingly. (2025-12-14 04:01--04:15, 18:29--18:58, 19:31--20:14)
-
-B<v0.8.2> - Added option B<--man> as an alias for B<--manual>. (2025-12-14
-23:46--23:59)
-
-B<v0.8.3> - Updated docs. (2025-12-15 00:01--02:56)
-
-B<v0.8.4> - Researched and added docs on how install tab completions for B<zdb>
-in B<zsh>, plus some other minor improvements to the L</FUTURE> section.
-(2025-12-15 18:14--20:10, 21:18-21:25)
-
-B<v0.8.5> - Added L</MILESTONES> to the docs & restructured the L</FUTURE>
-section somewhat. (2025-12-15 21:28--22:04)
-
-B<v0.8.6> - Added writing of new fields to a matching record. (2025-12-16
-23:36--00:03, 01:16--02:41)
-
-B<v0.8.7> - Added creation of new B<records> when giving I<FIELD>B<=>I<VALUE>
-without I<QUERY> on the command line. (2025-12-16 02:51--03:32, 06:21--06:37)
-
-B<0.8.8> - Wrote syntax hiliting files for Emacs (B<zdb-mode.el>) and B<bat>
-(B<ZDB.sublime-syntax>) and created a README with installation instructions,
-also added some notes to the docs. (2025-12-18 07:14--15:30)
-
-B<0.8.9> - Researched terminal feature 'back color erase' (B<bce>). In the end,
-no action needed. (2025-12-21 20:17--01:21)
-
-B<0.8.10> - Highlighting in three different levels. (2025-12-22 04:29--04:40)
-
-B<0.8.11> - BUGFIX: Uninitialized variable caused warning when there were no
-matches. (2025-12-22 04:49--04:52)
-
-B<0.8.12> - Now sets exit status to 1 if there's no match, 0 otherwise.
-(2025-12-22 04:57--05:04)
-
-B<0.8.13> - Added search wildcards B<*> *matching zero or more word characters)
-and B<_> (matching one or more whitespace characters). (2025-12-22
-05:23--07:06)
-
-B<0.8.14> - Implemented options B<-s>/B<--case-sensitive>,
-B<-i>/B<--ignore-case> and B<-S>/B<--smart-case> for controlling
-case-sensitivity of matching. (2025-12-22 07:08--10:34, 19:49--20:32,
-21:26--04:15, 2025-12-25 22:27--23:48)
-
-B<0.8.15> - Improve B<--test> output. Test output is now run through a filter,
-that removes passing, only showing fails and unexpected passes in TODO blocks.
-If all tests passed, a summary of remaining TODO(s) is also shown. Tests also
-obey color setting---the original test output is show if color output is
-disabled with B<--no-color>. (2025-12-24 19:12--03:09, 2025-12-26 00:02--00:44)
-
-B<0.8.16> - Added lockfile and (atomic) file updates. (2025-12-26 00:45--08:41)
-
-B<0.8.17> - Updated docs. (2025-12-26 08:41--09:07)
-
-B<0.8.18> - Better getting of and better error message when file is locked.
-(2025-12-28 00:32--02:15)
-
-B<0.8.19> - Updated Perl preamble & copyright year. (2026-01-04 19:29--19:31)
-
-B<0.8.20> - Clarified info & case options, added B<--> description. (2026-01-04
-21:05--22:10)
-
-B<0.8.21> - Clarified usage of I<WHEN> optarg for B<--color> and B<--paging>.
-(2026-01-04 22:10--22:30)
-
-B<0.8.22> - Implemented exit status for errors. (2026-01-05 12:32--13:13)
-
-B<0.8.23> - Rewrote/clarified some stuff in L</OPTIONS> section. (2026-01-05
-13:17--14:47)
-
-
-=head1 COPYRIGHT AND LICENSE
-
-Copyright 2025--2026, zrajm L<zrajm@klingonska.org>. ZDB file format copyright
-1998--2026 by zrajm and Klingonska Akademien (Uppsala, Sweden).
-L<https://klingonska.org>.
-
-License GPLv2: GNU General Public License version 2 or later
-L<https://gnu.org/licenses/gpl-2.0.html>. This is free software: you are free
-to change and redistribute it. There is NO WARRANTY, to the extent permitted by
-law. (See also C<zdb --version>.)
-
-
-=head1 SEE ALSO
-
-B<zdb> is partly inspired by GNU B<recutils>. -- When I first heard about
-B<recutils> I was delighted to find that its file format it is strikingly
-similar to the plain-text 'database' format I've used for my Klingon dictionary
-since the very end of the last century (see
-L<https://klingonska.org/dict/dict.zdb>). I was to a large degree inspired by
-the shortcomings of B<recutils> -- its query language is verbose and pretty
-inflexible (I felt I could do better!), and B<recutils> does not highlight
-matches.
-
-Hence, this little project! :)
-
-
-=head1 INTERNALS
-
-=head2 Internal query format
-
-The inputted query (or queries, if multiple B<-e>/B<--match=>I<QUERY> options
-are given) are parsed, normalized and compiled.
-
-During query parsing a query expression given on the command line is turned
-into a tree structure. Search words/phrases correspond to the leaf nodes in
-this tree and are called atoms (that's where the actual string matching is
-done) and parenthesis in the query correspond to the intermediate nodes (which
-have a type of either AND or OR). The query parser also adds additional
-intermediate nodes, where needed to resolve Boolean operator precedence.
-
-After parsing the query, the resulting query tree is normalized. This turns the
-query into Negation Normal Form, by moving any use of negation (C<->), and
-exact field match (C<=>) prefixes out into the leaf nodes of the query. These
-operations are thus only performed once during a search. (That is, search
-query like C<-(-x y)> is internally turned into C<(x,-y)> before matching is
-attempted).---This is allows doubly negated terms to be highlighted in the
-search result, and simplifies traversal of the intermediate nodes.
-
-Finally the query is compiled into a function which, when passed the contents
-of a database record, determines whether that particular record matches the
-query or not. (When match highlighting is enabled, it also returns the
-character offsets used for the highlighting.)
-
-
-=head2 Internal database representation
-
-In the main loop C<read_record()> is called over and over until the entire file
-has been read. (And the query is used in turn for each record to determine
-whether or not it matches.) C<read_record()> returns two values, the first of
-which is a string, and the second a list-of-lists. The initial string as all
-whitespace leading up to the record, and the list of list contain a listref for
-each field. The syntax for these listrefs are:
-
-    [FIELD, VALUE, BEG_SPACE, SEP_SPACE, END_SPACE]
-
-The first two being the field name and value, and the last three are all
-whitespaces, the B<BEG_SPACE> found just before B<FIELD>, B<SEP_SPACE> is the
-separator between B<FIELD> and B<VALUE>, and B<END_SPACE> comes after B<VALUE>.
-
-In the ZDB format B<BEG_SPACE> is always an empty string, and B<END_SPACE>
-always a newline. (These are mostly for future-proofing, and having the option
-of supporting other data formats in the future.) B<SEP_SPACE> may vary
-depending on the amount of whitespace found between B<FIELD> and B<VALUE>.
-
-
-=head2 Rejected ideas (for now)
-
-=over 4
-
-=item Handling of terminal feature 'back color erase' (B<bce>)
-
-After some research I don't think this issue B<needs> addressing. That
-terminals B<don't> extend the end-of-line background color to the right margin
-is the right thing to do in my eyes. Keeping it here for future reference.
-
-B<$GREP_COLORS> contain a feature C<B<ne>> which for handling the terminal
-feature 'back color erase' (B<bce>). Should B<zdb> also do this? When is it
-relevant?
-
-The (often quite opinionated) developer of Kitty (the terminal I'm currently
-using) has described B<bce> as an anti-feature, saying it won't added to
-Kitty---Which might be the correct decision for all I know (see
-L<https://github.com/kovidgoyal/kitty/discussions/3873#discussioncomment-15138580>).
-
-The following code outputs a text 30 times, and if it hits the bottom of your
-terminal window, then, on B<some> terminal & terminal multiplexers, you'll see
-the background color is set and a newline is printed you'll see the red
-background stretch out in a lite towards the right edge of the window (looking
-quite horrible)---I B<think> this in the B<bce> feature in action.
-
-    clear; for x ({1..30}) { echo $'def \e[41m red \n red \e[49m def' }
-
-Red background lines appear on: Linux console, B<qterminal> (which uses
-B<TERM=xterm>) and inside B<tmux> (regardless of which terminal it runs on).
-But not in B<kitty> or B<screen>.
-
-However, looking at the terminfo descriptions with:
-
-    infocmp $TERM | grep bce
-
-Does not correlate with the above behavior. If B<$TERM> is B<linux> (=linux
-console) and B<xterm> claim to support B<bce>, while B<tmux>, B<screen> and
-B<kitty> does not (in all instances B<TERM-256color> give the same result as
-plain as without the suffix B<-256-color>).
-
-It seems to me that what the B<$GREP_COLORS> B<ne> feature is trying to
-achieve, is to consistently extend any background color that is in effect at
-the end of the line all the way out to the right margin (the aesthetics of this
-isn't very pleasing to my eye, but I figure that's what it's going for).
-
-Trying this out on several different terminals with the command:
-
-    printf '\e[41m\e[Kfoobar\n\e[m'
-
-Yields the following result: The end-of-line background is extended to the
-right on: B<kitty>, B<linux> (= the Linux console), B<qterminal> and in B<tmux>
-(on all terminals), but not in B<screen> (in any terminal).
-
-=back
 
 
 =head1 MILESTONES
@@ -2846,6 +2359,495 @@ search expression between them (which counts as nothing) and the result is the
 same as the non-doubled version.
 
 For C<< ! >>, however, this is not true, and doubling that negates the negation.
+
+
+=head1 HISTORY
+
+B<v0.0.1> - Primitive initial functionality. Output a ZDB file (given a ZDB
+file on standard input), and split the file into records internally while
+preserving whitespace between records (and at the beginning & ending of file).
+(2025-11-11 00:51--06:50, 15:26--21:32; 2025-11-12 00:04--02:20)
+
+B<v0.1.0> - Defined internal query format, and internal data format. File now
+loads into the new format loading. Implemented search (using a simple hardcoded
+query). Added highlighting of search result (including overlapping matches).
+(2025-11-11 15:26--16:11, 19:45--21:31; 2025-11-12 00:04--03:28, 05:02--07:12;
+2025-11-14 01:03--06:30, 18:10--11:42)
+
+B<v0.1.1> - Documented internals somewhat. (2025-11-14 11:42--12:22)
+
+B<v0.2.0> - Added B<--pager> and B<--manpage> options. Pager defaults to
+whatever is specified in the $PAGER environment variable (defaulting to
+B<less>). B<--manpage> option shows simple documentation (not yet manpage
+formatted, but its *something*). Also removed the command line options
+B<--help-internals> and B<--todo> as this info is now part of the manpage
+instead. (2025-11-15 15:33--17:06)
+
+B<v0.3.0> - Pager now defaults to B<pager> (instead of B<less>). Better
+suppression of pager (or, in the case of B<--manpage>, manpager) when there are
+errors. Extensive rewrite of docs. (2025-11-16 00:06--04:39, 23:18--02:27;
+2025-11-17 04:29--08:10, 14:13--17:07)
+
+B<v0.3.1> - Moved query parsing and matching into Query module. (2025-11-17,
+18:53--19:23)
+
+B<v0.3.2> - Now gets QUERY from command line arguments. Very basic, all
+arguments are simply AND:ed, and each pattern is expected to match a whole word
+(with no wildcards or anything). (2025-11-18 19:26--19:39)
+
+B<v0.3.3> - Added B<--paging> option. (2025-11-18 19:39--21:21)
+
+B<v0.3.4> - Tested/verified and documented the B<$PAGER> and B<--pager=>I<CMD>
+capabilities. (Yes, Perl allows more complex commands to be used.) (2025-11-18
+21:21--21:42)
+
+B<v0.4.0> - Added B<ZDBPAGER> for B<zdb>-specific pager defaults. (2025-11-19
+00:04--01:01)
+
+B<v0.4.1> - Moved unit tests into Query module. (2025-11-19 02:28--02:41)
+
+B<v0.4.2> - Now use Test::More for unit tests in Query module. (2025-11-19
+02:41--03:20)
+
+B<v0.4.3> - Updated manpage. Added description of how to use B<zdb> as a
+shebang. Made sure manpage includes all required headlines. Added notes on
+L</FILES> and L</RESTRICTIONS>. (2025-11-20 07:31--09:08)
+
+B<v0.4.4> - Updated manpage with ideas for future. (2025-11-23 11:18--13:44)
+
+B<v0.5.0> - Renamed B<--manpage> option to B<--manual> (and added the short
+option B<-M>). The new option names are the same as those used by the B<curl>
+command. Unfortunately, almost no other commands seem to provide a flag to show
+their B<man> page, so it isn't very easy to find an intuitive option name to
+use. :( (2025-11-23 13:44--13:58)
+
+B<v0.5.1> - Expanded manpage. Improved chapters DESCRIPTION, QUERIES
+(subchapters 'Logic Operators', 'Field Prefixes' and 'Quoting'). Added and
+clarified a buncha stuff on the L</FUTURE> wishlist. (2025-11-25 08:49--11:29)
+
+B<v0.5.2> - Moved C<< END {} >> block to after info variables. (2025-11-25
+12:31--12:36)
+
+B<v0.6.0> - Added B<-e>/B<--match> option and removed B<-f>/B<--file> option.
+B<--file> was used to specify a database input file (mentioned as being
+inspired by B<grep>'s option of the same name) but B<grep> actually uses that
+option to specify a file of B<match patterns>, not data! This update brings the
+options in line with how B<grep>, B<sed> and B<awk> (actually) works.
+(2025-11-25 02:14--04:57, 11:37--12:56, 17:29--18:01; 2025-11-26 15:08--15:59)
+
+B<v0.6.1> - Support for '-' argument. QUERY argument now mandatory (until
+implementing L</No QUERY = Show database status>). Also updated usage string to
+reflect this. (2025-11-26 15:59--17:37)
+
+B<v0.6.2> - Documentation proofreading & fixes. (2025-11-26 18:46--18:59)
+
+B<v0.6.3> - Additional manpage spellfixes. (2025-11-26 18:59--19:20)
+
+B<v0.6.4> - Corrected B</bin/env> -> B</usr/bin/env>. (2025-11-26 19:20--19:23)
+
+B<v0.6.5> - Added note about hierarchical fields to L</FUTURE>. (2025-11-29
+00:13--00:25)
+
+B<v0.7.0> - Added some preliminary query parsing and started working on tests
+for the same. Code is currently in a non-functional state, as the PARSING is
+approaching done, but generating the query function from the parse tree remains
+to do be done. Also, the internal representation of the parse tree will most
+likely change. (2025-11-28 18:30--13:45)
+
+B<v0.7.1> - Added tests for C<Query::_parse()>, and got the 'bottomless' stack
+feature to work (meaning that unmatched ')' in the syntax query now works too).
+(2025-11-30 13:20--14:11, 20:20--22:12; 2025-12-01 08:16--10:40, 11:21--13:50,
+15:50--16:48, 23:03--23:34)
+
+B<v0.7.2> - Test callback function now declared using C<sub {}>. (2025-12-01
+23:42--23:50)
+
+B<v0.7.3> - Remove use of 'plain' object property when parsing (& testing)
+query. (Now use only the '_word' property which is split into individual
+chars.) (2025-12-01 23:54--23:57)
+
+B<v0.7.4> - Very minor cleanup. (2025-12-02 08:43--08:56)
+
+B<v0.7.5> - Moved some parsing logic into Query::Stack. (2025-12-02
+09:15--09:52)
+
+B<v0.7.6> - Made finite state machine shorter/more readable. Added a test for
+double parentheses. (2025-12-02 10:02--10:06)
+
+B<v0.7.7> - Simplify query during parsing by trimming empty words. (2025-12-02
+11:34--13:44)
+
+B<v0.7.8> - BUGFIX: Honor quotes in query + test cases for that + other small
+fixes. (2025-12-02 13:51--14:20)
+
+B<v0.7.9> - Removed 'or' field from stack items, and added 'type' = 'word' for
+word items (now relying on 'type' = 'and', 'or', 'nor' or 'word'). (2025-12-02
+16:05--17:25)
+
+B<v0.7.10> - Changed internal format. Search words are now also (just like
+parentheses) stored as arrayrefs, where first element is a metadata hashref.
+(2025-12-02 17:58--18:42, 21:12--22:30)
+
+B<v0.7.11> - Renamed a B<Query::Stack> function. Documented the future of the
+query parsing. (2025-12-02 22:38--22:58)
+
+B<v0.7.12> - Removed unused query cleanup function. (2025-12-03 08:04--08:12)
+
+B<v0.7.13> - Now removes empty terms in QUERY during parsing. This continually
+cleans up both empty search words (which are inserted as part of the query
+parsing itself) and empty parentheses as the query is being parsed. (2025-12-03
+08:12--09:20)
+
+B<v0.7.14> - Slightly different syntax for unit tests involving 'not' (B<->)
+and 'field' (B<=>) prefixes. (2025-12-03 09:45--10:05)
+
+B<v0.7.15> - Slight change in debug output. No longer using 'nor' for negative
+OR parentheses, but instead prefixing parentheses B<-> and B<=> for negated and
+field matching. (2025-12-03 10:14--11:40)
+
+B<v0.7.16> - Now removes any parenthesis in QUERY that wrap a single term. Term
+inside is kept, and the 'not' and 'field' attributes of the removed parenthesis
+and the term are combined. (2025-12-03 17:31--21:54)
+
+B<v0.7.17> - Prettier B<--test> output. (2025-12-03 23:46--00:51)
+
+B<v0.7.18> - Added a slew of unit tests. Unit tests were taken from my online
+Swedish Sign Language dictionary, which implement a very similar (sloppy) query
+language (L<https://zrajm.org/teckentranskription/lexicon-tests.html>).
+(2025-12-04 07:50--12:14)
+
+B<v0.7.19> - Implemented query B<Query::_normalize()>, which moves query
+prefixes C<B<->> and C<B<=>> to the leaf nodes of the query, applying De
+Morgan's Law. This makes sure that match highlighting works, by no query term
+negated more than once. Also added the tests required to test the new function,
+and adapted the test functions for this. (2025-12-04 00:56--01:49,
+17:24--17:51, 18:06--18:23; 2025-12-05 09:05--12:39)
+
+B<v0.7.20> - Prettified this L</HISTORY> section. (2025-12-05 12:42--13:16)
+
+B<v0.7.21> - Implemented rudimentary B<Query::_compile()> function. QUERY is
+now used for actual searching of database. (2025-12-05 14:15--15:56; 2025-12-06
+02:18--03:47)
+
+B<v0.7.22> - Cleanup of unused code. (2025-12-06 04:38--04:50)
+
+B<v0.7.23> - Minor change in argument parsing. (2025-12-07 20:44--21:01)
+
+B<v0.7.24> - QUERY prefixes C<B<->> and C<B<=>> now work in search. (2025-12-07
+21:01--22:19)
+
+B<v0.7.25> - Added query compilation 'lang' argument for specifying which
+functions to use for AND/OR and string matching in the finalized query. The
+purpose of these is to be able to provide alternate functions, e.g. for
+producing highlighted output, for dumping the query in cleaned up form.
+(2025-12-07 22:19--22:48)
+
+B<v0.7.26> - Renamed query type C<word> to C<atom>. (2025-12-07 22:48--23:06)
+
+B<v0.7.27> - Minor docs update on internal structure. (2025-12-07 23:06--23:21)
+
+B<v0.7.28> - Simplified B<Query::_compile()>. (2025-12-07 23:23--23:31)
+
+B<v0.7.29> - Implemented query dump output. (2025-12-07 23:33--00:16)
+
+B<v0.7.30> - Command exit code was always 255, this fixes that. (2025-12-09
+13:20--13:34)
+
+B<v0.7.31> - Added options B<--no-color> and B<--no-paging> and updated
+relevant documentation. (2025-12-11 20:38--21:10)
+
+B<v0.8.0> - Added highlighting of matching strings, and also added unit tests
+for all the new functions related to this, as well unit tests for the older
+matching logic. (2025-12-08 01:20--02:16, 14:15--17:03, 17:49--18:51,
+2025-12-09 12:27--13:00, 15:09--15:29, 20:24--00:20 2025-12-10 14:27--16:29,
+17:05--19:23 2025-12-11 14:10--14:48, 16:13--17:04, 18:57--19:33, 2025-12-12
+22:01--22:24, 2025-12-13 02:39--03:07, 12:06--12:39, 12:52--13:11, 2025-12-14
+00:58--01:54, 02:19--04:01)
+
+B<v0.8.1> - Search now highlighting disabled now works (again). This involved
+making the _matcher() functions return true/false even in list context. Updated
+unit tests accordingly. (2025-12-14 04:01--04:15, 18:29--18:58, 19:31--20:14)
+
+B<v0.8.2> - Added option B<--man> as an alias for B<--manual>. (2025-12-14
+23:46--23:59)
+
+B<v0.8.3> - Updated docs. (2025-12-15 00:01--02:56)
+
+B<v0.8.4> - Researched and added docs on how install tab completions for B<zdb>
+in B<zsh>, plus some other minor improvements to the L</FUTURE> section.
+(2025-12-15 18:14--20:10, 21:18-21:25)
+
+B<v0.8.5> - Added L</MILESTONES> to the docs & restructured the L</FUTURE>
+section somewhat. (2025-12-15 21:28--22:04)
+
+B<v0.8.6> - Added writing of new fields to a matching record. (2025-12-16
+23:36--00:03, 01:16--02:41)
+
+B<v0.8.7> - Added creation of new B<records> when giving I<FIELD>B<=>I<VALUE>
+without I<QUERY> on the command line. (2025-12-16 02:51--03:32, 06:21--06:37)
+
+B<0.8.8> - Wrote syntax hiliting files for Emacs (B<zdb-mode.el>) and B<bat>
+(B<ZDB.sublime-syntax>) and created a README with installation instructions,
+also added some notes to the docs. (2025-12-18 07:14--15:30)
+
+B<0.8.9> - Researched terminal feature 'back color erase' (B<bce>). In the end,
+no action needed. (2025-12-21 20:17--01:21)
+
+B<0.8.10> - Highlighting in three different levels. (2025-12-22 04:29--04:40)
+
+B<0.8.11> - BUGFIX: Uninitialized variable caused warning when there were no
+matches. (2025-12-22 04:49--04:52)
+
+B<0.8.12> - Now sets exit status to 1 if there's no match, 0 otherwise.
+(2025-12-22 04:57--05:04)
+
+B<0.8.13> - Added search wildcards B<*> *matching zero or more word characters)
+and B<_> (matching one or more whitespace characters). (2025-12-22
+05:23--07:06)
+
+B<0.8.14> - Implemented options B<-s>/B<--case-sensitive>,
+B<-i>/B<--ignore-case> and B<-S>/B<--smart-case> for controlling
+case-sensitivity of matching. (2025-12-22 07:08--10:34, 19:49--20:32,
+21:26--04:15, 2025-12-25 22:27--23:48)
+
+B<0.8.15> - Improve B<--test> output. Test output is now run through a filter,
+that removes passing, only showing fails and unexpected passes in TODO blocks.
+If all tests passed, a summary of remaining TODO(s) is also shown. Tests also
+obey color setting---the original test output is show if color output is
+disabled with B<--no-color>. (2025-12-24 19:12--03:09, 2025-12-26 00:02--00:44)
+
+B<0.8.16> - Added lockfile and (atomic) file updates. (2025-12-26 00:45--08:41)
+
+B<0.8.17> - Updated docs. (2025-12-26 08:41--09:07)
+
+B<0.8.18> - Better getting of and better error message when file is locked.
+(2025-12-28 00:32--02:15)
+
+B<0.8.19> - Updated Perl preamble & copyright year. (2026-01-04 19:29--19:31)
+
+B<0.8.20> - Clarified info & case options, added B<--> description. (2026-01-04
+21:05--22:10)
+
+B<0.8.21> - Clarified usage of I<WHEN> optarg for B<--color> and B<--paging>.
+(2026-01-04 22:10--22:30)
+
+B<0.8.22> - Implemented exit status for errors. (2026-01-05 12:32--13:13)
+
+B<0.8.23> - Rewrote/clarified some stuff in L</OPTIONS> section. (2026-01-05
+13:17--14:47)
+
+B<0.8.24> - Reordered manpage sections. (2026-01-05 14:49--15:12)
+
+
+=head1 INTERNALS
+
+=head2 Internal query format
+
+The inputted query (or queries, if multiple B<-e>/B<--match=>I<QUERY> options
+are given) are parsed, normalized and compiled.
+
+During query parsing a query expression given on the command line is turned
+into a tree structure. Search words/phrases correspond to the leaf nodes in
+this tree and are called atoms (that's where the actual string matching is
+done) and parenthesis in the query correspond to the intermediate nodes (which
+have a type of either AND or OR). The query parser also adds additional
+intermediate nodes, where needed to resolve Boolean operator precedence.
+
+After parsing the query, the resulting query tree is normalized. This turns the
+query into Negation Normal Form, by moving any use of negation (C<->), and
+exact field match (C<=>) prefixes out into the leaf nodes of the query. These
+operations are thus only performed once during a search. (That is, search
+query like C<-(-x y)> is internally turned into C<(x,-y)> before matching is
+attempted).---This is allows doubly negated terms to be highlighted in the
+search result, and simplifies traversal of the intermediate nodes.
+
+Finally the query is compiled into a function which, when passed the contents
+of a database record, determines whether that particular record matches the
+query or not. (When match highlighting is enabled, it also returns the
+character offsets used for the highlighting.)
+
+
+=head2 Internal database representation
+
+In the main loop C<read_record()> is called over and over until the entire file
+has been read. (And the query is used in turn for each record to determine
+whether or not it matches.) C<read_record()> returns two values, the first of
+which is a string, and the second a list-of-lists. The initial string as all
+whitespace leading up to the record, and the list of list contain a listref for
+each field. The syntax for these listrefs are:
+
+    [FIELD, VALUE, BEG_SPACE, SEP_SPACE, END_SPACE]
+
+The first two being the field name and value, and the last three are all
+whitespaces, the B<BEG_SPACE> found just before B<FIELD>, B<SEP_SPACE> is the
+separator between B<FIELD> and B<VALUE>, and B<END_SPACE> comes after B<VALUE>.
+
+In the ZDB format B<BEG_SPACE> is always an empty string, and B<END_SPACE>
+always a newline. (These are mostly for future-proofing, and having the option
+of supporting other data formats in the future.) B<SEP_SPACE> may vary
+depending on the amount of whitespace found between B<FIELD> and B<VALUE>.
+
+
+=head2 Rejected ideas (for now)
+
+=over 4
+
+=item Handling of terminal feature 'back color erase' (B<bce>)
+
+After some research I don't think this issue B<needs> addressing. That
+terminals B<don't> extend the end-of-line background color to the right margin
+is the right thing to do in my eyes. Keeping it here for future reference.
+
+B<$GREP_COLORS> contain a feature C<B<ne>> which for handling the terminal
+feature 'back color erase' (B<bce>). Should B<zdb> also do this? When is it
+relevant?
+
+The (often quite opinionated) developer of Kitty (the terminal I'm currently
+using) has described B<bce> as an anti-feature, saying it won't added to
+Kitty---Which might be the correct decision for all I know (see
+L<https://github.com/kovidgoyal/kitty/discussions/3873#discussioncomment-15138580>).
+
+The following code outputs a text 30 times, and if it hits the bottom of your
+terminal window, then, on B<some> terminal & terminal multiplexers, you'll see
+the background color is set and a newline is printed you'll see the red
+background stretch out in a lite towards the right edge of the window (looking
+quite horrible)---I B<think> this in the B<bce> feature in action.
+
+    clear; for x ({1..30}) { echo $'def \e[41m red \n red \e[49m def' }
+
+Red background lines appear on: Linux console, B<qterminal> (which uses
+B<TERM=xterm>) and inside B<tmux> (regardless of which terminal it runs on).
+But not in B<kitty> or B<screen>.
+
+However, looking at the terminfo descriptions with:
+
+    infocmp $TERM | grep bce
+
+Does not correlate with the above behavior. If B<$TERM> is B<linux> (=linux
+console) and B<xterm> claim to support B<bce>, while B<tmux>, B<screen> and
+B<kitty> does not (in all instances B<TERM-256color> give the same result as
+plain as without the suffix B<-256-color>).
+
+It seems to me that what the B<$GREP_COLORS> B<ne> feature is trying to
+achieve, is to consistently extend any background color that is in effect at
+the end of the line all the way out to the right margin (the aesthetics of this
+isn't very pleasing to my eye, but I figure that's what it's going for).
+
+Trying this out on several different terminals with the command:
+
+    printf '\e[41m\e[Kfoobar\n\e[m'
+
+Yields the following result: The end-of-line background is extended to the
+right on: B<kitty>, B<linux> (= the Linux console), B<qterminal> and in B<tmux>
+(on all terminals), but not in B<screen> (in any terminal).
+
+=back
+
+
+=head1 TAB COMPLETION
+
+This is how to set up tab completion for B<zdb>. I've only listed how to do it
+for B<zsh> since that's the shell I'm using. Feel free to contribute
+suggestions for other shells!
+
+=head2 Tab completion for Zsh
+
+To get autocompletion of B<zdb> options in B<zsh>, create a file called F<_zdb>
+(with an initial '_'!) in the whatever directory your instance of B<zsh> keeps
+its autocompletion functions.
+
+    #compdef zdb
+    _arguments \
+      '--color=[When to use colors]:WHEN:(always auto never)' \
+      '--paging=[When to use paging]:WHEN:(always auto never)' \
+      '*: :_gnu_generic'
+
+This directory will be one of the directories in the B<$FPATH> environment
+variable, to list them all in an easily readable fashion, use:
+
+    echo ${(F)fpath}
+
+This autocompletion function should actually allow any arbitrary command (with
+options) to be entered as an argument for B<--pager>, and I should also like a
+little query language cheatsheet to be displayed when tab is pressed in a query
+position (that is, as the first arg, or as an argument to B<--e>/B<--match>.
+
+
+=head1 CAVEATS
+
+FIXME
+
+
+=head1 RESTRICTIONS
+
+Only two different colors are used when highlighting found matches. This means
+that if multiple search terms overlap, the color intensity will only ever
+accurately reflect one or two overlapping matches. The color will not increase
+beyond that. This is not expected to change in the future. (As overlapping
+matches are presumably pretty rare anyways.)
+
+
+=head1 EXAMPLES
+
+=head2 'Self-searchable' ZDB databases
+
+One may create 'self-searchable' ZDB database, which can be invoked by using
+the database file itself as a command. For example, my Klingon dictionary is
+called F<klingon.zdb>, and to search for the word 'phaser' I can simply write:
+
+     ./klingon.zdb phaser
+
+To achieve this, a (relatively complicated) shebang (C<#!>) line needs to be
+added to the top of the database file. This shebang invokes B<zdb>, and
+rearranges the arguments so that name of the database file occurs last in the
+command. The following B<shebang> can be used:
+
+    #!/usr/bin/env -S sh -c 'exec zdb "$@" "$0"'
+
+For the above to work B<zdb> needs to be somewhere in your B<$PATH>.
+
+As the shebang command is invoked, the first argument (B<$0>) is the name of
+the B<zdb> database file (in which the shebang line is found). If we did not
+invoke B<sh> to flip the arguments around, B<$0> would have been given as the
+first argument (which would've caused B<zdb> to throw an error).
+
+The database file also needs to be executable for this to work.
+
+    chmod +x ZDBFILE
+
+Now, 'executing' the database will pass all arguments given as-is to B<zdb>,
+with the name of the database file tucked onto the end of the command line.
+
+
+=head1 AUTHOR
+
+Copyright (C) 1998--2026 zrajm <zrajm@klingonska.org>.
+
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2025--2026, zrajm L<zrajm@klingonska.org>. ZDB file format copyright
+1998--2026 by zrajm and Klingonska Akademien (Uppsala, Sweden).
+L<https://klingonska.org>.
+
+License GPLv2: GNU General Public License version 2 or later
+L<https://gnu.org/licenses/gpl-2.0.html>. This is free software: you are free
+to change and redistribute it. There is NO WARRANTY, to the extent permitted by
+law. (See also C<zdb --version>.)
+
+
+=head1 SEE ALSO
+
+B<zdb> is partly inspired by GNU B<recutils>. -- When I first heard about
+B<recutils> I was delighted to find that its file format it is strikingly
+similar to the plain-text 'database' format I've used for my Klingon dictionary
+since the very end of the last century (see
+L<https://klingonska.org/dict/dict.zdb>). I was to a large degree inspired by
+the shortcomings of B<recutils> -- its query language is verbose and pretty
+inflexible (I felt I could do better!), and B<recutils> does not highlight
+matches.
+
+Hence, this little project! :)
 
 =cut
 
