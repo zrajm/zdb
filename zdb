@@ -10,8 +10,8 @@ use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
 use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.25';                         # https://semver.org/
-our $VERSION_DATE='5 January 2026';
+our $VERSION='0.8.26';                         # https://semver.org/
+our $VERSION_DATE='6 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -462,7 +462,6 @@ sub highlight {
             ' ' => sub { $stack->push('atom') },
             #':' => sub { my ($s) = @_ },                                  # FIXME
             '"' => sub { my ($last, $chr) = @_; $last->[0]{quote} = $chr },
-            "'" => sub { my ($last, $chr) = @_; $last->[0]{quote} = $chr },
             CHR => sub {
                 my ($last, $chr) = @_;
                 state %special = ('*' => '\w*', '_' => '\s+');
@@ -1397,7 +1396,7 @@ my $zdb = new ZDB(
     write => $opt{write},                      # write mode?
 );
 
-say 'QUERY: ' . new Query(join(',', @query), { lang => 'dump' })->()
+say 'QUERY: ' . new Query($query_str, { lang => 'dump' })->()
     if $opt{verbose};
 
 my $out = '';
@@ -1798,7 +1797,7 @@ either a field called 'name' or 'alias'.)
     ┌──────────────────┬───────────────┐
     │  Character       │ Used For      │
     ├──────────────────┼───────────────┤
-    │ "…" (quotes)     │ quoting       │
+    │ "…" (quotes)     │ quoting       │ (single quotes do not work)
     ├──────────────────┼───────────────┤
     │ ""  (two quotes) │ literal quote │ FIXME: NOT YET IMPLEMENTED
     ├──────────────────┼───────────────┤
@@ -2640,6 +2639,9 @@ B<0.8.24> - Reordered manpage sections. (2026-01-05 14:49--15:12)
 
 B<0.8.25> - Updated L</EXAMPLES> and L</RESTRICTIONS>. (2026-01-05
 15:12--15:48)
+
+B<0.8.26> - BUGFIX: Single quotes are now interpreted literally (like the docs
+say) instead of quoting strings. (2026-01-06 17:48--17:55)
 
 
 =head1 INTERNALS
