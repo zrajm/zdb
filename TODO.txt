@@ -1,0 +1,27 @@
+-*- org -*-
+
+* DONE Apostrophe does not match                                        :BUG:
+  CLOSED: [2026-01-06 Tue 17:56]
+  Apostrophe should work the same as any letter. Meaning that the following
+  should match, but it doesn't.
+      ----------------------------------------
+      zdb "bat'" klingon.zdb
+      zdb "bat'leth" klingon.zdb
+      ----------------------------------------
+* DONE Search fails if all terms are negated                            :BUG:
+  CLOSED: [2026-01-08 Thu 17:07]
+  Should work (not result in error message).
+      ----------------------------------------
+      zdb -- -batlh klingon.zdb
+      ----------------------------------------
+* TODO Database is clobbered when adding fields                         :BUG:
+  The following command, which matches multiple records, clobbers
+  'klingon.zdb', overwriting it with a zero-byte file!!
+
+      ----------------------------------------
+      zdb 'batlh' hi=nono klingon.zdb
+      ----------------------------------------
+* Prefix support
+  For ':' matches, reduce the inputted entry by removing non-matching fields,
+  and replacing them with '[]' (so that the hilite marks are still valid).
+* [eof]
