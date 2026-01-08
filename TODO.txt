@@ -14,13 +14,15 @@
       ----------------------------------------
       zdb -- -batlh klingon.zdb
       ----------------------------------------
-* TODO Database is clobbered when adding fields                         :BUG:
+* DONE Database is clobbered when adding fields                         :BUG:
+  CLOSED: [2026-01-08 Thu 17:46]
   The following command, which matches multiple records, clobbers
   'klingon.zdb', overwriting it with a zero-byte file!!
 
       ----------------------------------------
       zdb 'batlh' hi=nono klingon.zdb
       ----------------------------------------
+* TODO Database syntax -- use only '\t' indent
 * Prefix support
   For ':' matches, reduce the inputted entry by removing non-matching fields,
   and replacing them with '[]' (so that the hilite marks are still valid).

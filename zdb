@@ -10,7 +10,7 @@ use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
 use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.27';                         # https://semver.org/
+our $VERSION='0.8.28';                         # https://semver.org/
 our $VERSION_DATE='8 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -199,6 +199,7 @@ sub highlight {
             file => $opt{file},
             lock => $lockfile,
             temp => $tempfile,
+            outok=> '',                        # set on successful write
             out  => $out,
             in   => $in,
             rec  => [split($ENTRY_REGEX, do { local $/; <$in> })],
@@ -276,6 +277,7 @@ sub highlight {
     sub write {
         my ($self, @data) = @_;
         print { $self->{out} } @data;
+        $self->{outok} = 1;
     }
     sub eof {
         my ($self) = @_;
@@ -287,15 +289,19 @@ sub highlight {
             ? "Can't close input file '$self->{file}': $!\n"
             : "Can't close standard input: $!\n"
             if $self->{in};
-        close($self->{out}) or die $self->{temp}
-            ? "Can't close output file '$self->{temp}': $!\n"
-            : "Can't close standard output: $!\n"
-            if $self->{temp};
-        rename $self->{temp}, $self->{file}
-            or die "Can't rename file '$self->{temp}' to '$self->{file}': $!\n"
-            if $self->{temp};
+        if ($self->{temp}) {
+            close($self->{out}) or die $self->{temp}
+                ? "Can't close output file '$self->{temp}': $!\n"
+                : "Can't close standard output: $!\n";
+            rename $self->{temp}, $self->{file}
+                or die "Can't rename file '$self->{temp}' to '$self->{file}': $!\n"
+                if $self->{outok};
+            unlink $self->{temp}
+                or die "Can't delete tempfile '$self->{temp}': $!\n"
+                if not $self->{outok};
+        }
         unlink $self->{lock}
-            or warn "Can't delete lock file '$self->{lock}': $!"
+            or warn "Can't delete lockfile '$self->{lock}': $!"
             if $self->{lock};
     }
 }
@@ -1317,7 +1323,7 @@ local %SIG = (
     });
 
 my (@arg, @query);
-my $to_write = '';
+my $write_str = '';
 %opt = (
     case   => -1,                              # -1: smart, 0: exact, 1: ignore
     color  => -t STDOUT,
@@ -1355,7 +1361,7 @@ while (@ARGV) {
     /^(       --test          )$/x and do { $opt{test} = 1;             next };
     /^(-v    |--verbose       )$/x and do { $opt{verbose} = 1;          next };
     /^(       --version       )$/x and do { $opt{info} = version();     next };
-    /^((?!\d)\w+)        =(.*) $/x and do { $to_write .= "$1\t$2\n";    next };
+    /^((?!\d)\w+)        =(.*) $/x and do { $write_str .= "$1\t$2\n";   next };
     die "Unknown option '${ s/=.*//; \$_ }'.\n" if /^-./;
     push(@arg, $_);
 }
@@ -1374,14 +1380,14 @@ if (-t STDIN) {                                # get FILE
     die "Specify either FILE or standard input, not both.\n" if @arg > 1;
 }
 @query = shift(@arg) if @arg and !@query;      # get QUERY arg (not -eQUERY)
-die "No QUERY and/or FIELD=VALUE(s) given.\n" unless @query or $to_write;
+die "No QUERY and/or FIELD=VALUE(s) given.\n" unless @query or $write_str;
 
 # FIXME: split $opt{pager} (?)
 $pager_pid = open(STDOUT, '|-', $opt{pager})   # send all STDOUT through pager
     or die "Can't exec '$opt{pager}': $!\n"    #   (if enabled)
     if $opt{paging};
 
-if ($to_write) {
+if ($write_str) {
     $opt{color} = 0;
     $opt{write} = 1;
 }
@@ -1407,9 +1413,9 @@ while (my ($prespace, @field) = $zdb->read_record()) {
     # FIELD=VALUE(s) but no QUERY. Output new record at end.
     if (not @query and $zdb->eof()) {
         $out .= "\n";
-        if ($to_write) {
-            $out .= $to_write;
-            $to_write = '';
+        if ($write_str) {
+            $out .= $write_str;
+            $write_str = '';
         }
     }
     # Output record (possibly with highlight, possibly not).
@@ -1425,16 +1431,16 @@ while (my ($prespace, @field) = $zdb->read_record()) {
     }
     # FIELD=VALUES(s) and QUERY. Insert fields into matching record.
     if (@found) {
-        die "Can't insert data, QUERY matched more than one record\n"
-            if $opt{write} and not $to_write;
-        if ($to_write) {
-            $out .= $to_write;
-            $to_write = '';
+        die "Can't insert data, QUERY matched multiple records\n"
+            if $opt{write} and not $write_str;
+        if ($write_str) {
+            $out .= $write_str;
+            $write_str = '';
         }
     }
 }
 die "Can't insert data, QUERY did not match any record\n"
-    if $opt{write} and $to_write;
+    if $opt{write} and $write_str;
 
 if ($opt{write} and $out) {
     $zdb->write($out);
@@ -1853,7 +1859,9 @@ providing data on standard input. (These errors are also given the "Try 'zdb
 
 Operation failure. Errors found during processing. These resulted from a valid
 command invocation that encountered some later error, such as failing to obtain
-a file lock, or failing to write to file.
+a file lock, or failing to write to file (either because of a disk failure, or,
+when inserting field, because either zero or multiple records matched the
+query).
 
 =back
 
@@ -2645,6 +2653,9 @@ say) instead of quoting strings. (2026-01-06 17:48--17:55)
 
 B<0.8.27> - BUGFIX: Search where all terms are negated now works. (2026-01-08
 16:58--17:07)
+
+B<0.8.28> - BUGFIX: Don't clobber database when insert fails. (2026-01-08
+17:14--17:45)
 
 
 =head1 INTERNALS
