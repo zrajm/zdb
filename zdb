@@ -10,8 +10,8 @@ use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
 use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.26';                         # https://semver.org/
-our $VERSION_DATE='6 January 2026';
+our $VERSION='0.8.27';                         # https://semver.org/
+our $VERSION_DATE='8 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -1418,8 +1418,8 @@ while (my ($prespace, @field) = $zdb->read_record()) {
         my ($field, $value, $space_beg, $space_sep, $space_end)
             = @{shift @field};
         if ($opt{color}) {                     # add highlights
-            $field = highlight($field, @{shift @found});
-            $value = highlight($value, @{shift @found});
+            $field = highlight($field, @{shift @found}) if @found;
+            $value = highlight($value, @{shift @found}) if @found;
         }
         $out .= $space_beg . $field . $space_sep . $value . $space_end;
     }
@@ -2642,6 +2642,9 @@ B<0.8.25> - Updated L</EXAMPLES> and L</RESTRICTIONS>. (2026-01-05
 
 B<0.8.26> - BUGFIX: Single quotes are now interpreted literally (like the docs
 say) instead of quoting strings. (2026-01-06 17:48--17:55)
+
+B<0.8.27> - BUGFIX: Search where all terms are negated now works. (2026-01-08
+16:58--17:07)
 
 
 =head1 INTERNALS
