@@ -10,7 +10,7 @@ use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
 use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zdb@zrajm.org>';
-our $VERSION='0.8.30';                         # https://semver.org/
+our $VERSION='0.8.31';                         # https://semver.org/
 our $VERSION_DATE='9 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -786,7 +786,7 @@ sub highlight {
             $query_str //= '';
             $msg       //= '';
             local $Test::Builder::Level = $Test::Builder::Level + 1;
-            is_deeply(_parse($query_str), $want,
+            is_deeply(_normalize(_parse($query_str)), $want,
                       "query: «$query_str»" . ($msg && " ($msg)"));
         }
         sub dies_with(&$;$) {
@@ -1165,22 +1165,18 @@ sub highlight {
             query_is('--a'     => atom('a'), 'means «a»');
             query_is('-(a)'    => neg(atom('a')), 'means «-a»');
             query_is('-(-a)'   => atom('a'), 'means «a»');
-            query_is('-(a -b)' => neg(and(atom('a'), neg atom('b'))), 'means «(-a,b)» -- FIXME De Morgan');
-            query_is('-(a,-b)' => neg(or(atom('a'), neg(atom('b')))), 'means «(-a b)» -- FIXME De Morgan');
-            TODO "Push 'not' to leaf nodes" => sub {
-                query_is('-(a -b)' => or(neg(atom('a')), atom('b')), 'means «(-a,b)»');
-                query_is('-(a,-b)' => or(neg(atom('a')), atom('b')), 'means «(-a b)»');
-            };
+            query_is('-(a -b)' => or(neg(atom('a')), atom('b')),
+                     'means «(-a,b)» (De Morgan\'s Law)');
+            query_is('-(a,-b)' => and(neg(atom('a')), atom('b')),
+                     'means «(-a b)» (De Morgan\'s Law)');
         };
         subtest 'FIELD PROPAGATION' => sub {
             query_is('=(a)'    => field(atom('a')), 'means «=a»');
             query_is('=(=a)'   => atom('a'), 'means «a»');
-            query_is('=(a =b)' => field(and(atom('a'), field atom('b'))), 'means «=a b» FIXME');
-            query_is('=(a,=b)' => field(or(atom('a'), field(atom('b')))), 'means «=a,b» FIXME');
-            TODO "Push 'field' to leaf nodes" => sub {
-                query_is('=(a =b)' => and(field(atom('a')), atom('b')), 'means «=a b»');
-                query_is('=(a,=b)' => or(field(atom('a')), atom('b')), 'means «=a,b»');
-            };
+            query_is('=(a =b)' => and(field(atom('a')), atom('b')),
+                     'means «=a b»');
+            query_is('=(a,=b)' => or(field(atom('a')), atom('b')),
+                     'means «=a,b»');
         };
         note("SLOPPY QUERY TESTS\n",
              '(from https://zrajm.org/teckentranskription/lexicon-tests.html)');
@@ -1189,7 +1185,8 @@ sub highlight {
             query_is('-a'     => neg(atom('a')),                 '1.2');
             query_is('a b'    => and(atom('a'), atom('b')),      '1.3');
             query_is('(a b)'  => and(atom('a'), atom('b')),      '1.4');
-            query_is('-(a b)' => neg(and(atom('a'), atom('b'))), '1.5');
+            query_is('-(a b)' => or(neg(atom('a')), neg(atom('b'))),
+                     '1.5 (De Morgan\'s Law)');
         };
         subtest '2. Missing start parenthesis' => sub {
             query_is('a)' => atom('a'), '2.1');
@@ -2665,6 +2662,9 @@ B<0.8.29> - BUGFIX: Die() if writing to output file fails. (2026-01-09
 
 B<0.8.30> - Minor docs update, added webpage & minor README updates.
 (2026-01-09 08:21--09:46)
+
+B<0.8.31> - Updated unit tests to include query normalization and application
+of De Morgan's Law. (2026-01-09 13:40--14:01)
 
 
 =head1 INTERNALS
