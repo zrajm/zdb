@@ -22,11 +22,42 @@
       ----------------------------------------
       zdb 'batlh' hi=nono klingon.zdb
       ----------------------------------------
+* TODO Query with missing leading parenthesis should work               :BUG:
 * TODO Database syntax -- only allow '\t' for indent
   The use of <space> for indentation makes almost all normal text files into
   valid ZDB files which makes far to easy to accidentally/unintentionally
   invoke zdb in a way which messes up some innocent text file.
+* TODO Add query prefix '#' (comment matching)
+* TODO Add query prefix '^' (case sensitivity)
+  Also change --smart-match so that an upper case letter will affect the
+  matching of that specific search term, but not the whole query.
+* TODO Support multiple queries (using -e)
+  These should, just like for grep, be combined using OR.
+* TODO `--show-query` -- to show cleaned up query (without searching)
+  What would the option be called? `--show-query`?
+
+  Note that the current `--verbose` option does not add parentheses every time
+  they are needed. In the following query the shown output is incorrect, as the
+  removal of the parentheses in the OR:ed part of the query changes the
+  meaning. (The correct output is `(batlh,quv) principles`.)
+
+  ----------------------------------------
+  zdb --verbose '(batlh, quv) principles' klingon.zdb | grep QUERY
+  QUERY: batlh,quv principles
+  ----------------------------------------
+
+  The normalized query should be shown. -- It is not totally obvious that this
+  is the best version to show, since the normalized version might LONGER than
+  what the user inputted (for example, `-=(a b c)` becomes `-=a, -=b, -=c`) --
+  but having it spelled out like this makes it easier to reason about and debug
+  the query. -- Which, I think would be one of the most useful aspects of a
+  `--show-query` option.
 * Prefix support
   For ':' matches, reduce the inputted entry by removing non-matching fields,
   and replacing them with '[]' (so that the hilite marks are still valid).
+* UNIT TESTS
+** TODO Database field insert, non-matching query (should fail)
+** TODO Database field insert, multiple-matching query (should fail)
+** TODO Database field insert, single-matching query (should work)
+** TODO Database record insert
 * [eof]
