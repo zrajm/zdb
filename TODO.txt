@@ -22,7 +22,10 @@
       ----------------------------------------
       zdb 'batlh' hi=nono klingon.zdb
       ----------------------------------------
-* TODO Database syntax -- use only '\t' indent
+* TODO Database syntax -- only allow '\t' for indent
+  The use of <space> for indentation makes almost all normal text files into
+  valid ZDB files which makes far to easy to accidentally/unintentionally
+  invoke zdb in a way which messes up some innocent text file.
 * Prefix support
   For ':' matches, reduce the inputted entry by removing non-matching fields,
   and replacing them with '[]' (so that the hilite marks are still valid).
