@@ -9,8 +9,8 @@ use warnings  qw(FATAL utf8);            # fatalize encoding glitches
 use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
 use charnames qw(:full :short);          # unneeded in v5.16
 
-our $AUTHOR='zrajm <zrajm@zrajm.org>';
-our $VERSION='0.8.29';                         # https://semver.org/
+our $AUTHOR='zrajm <zdb@zrajm.org>';
+our $VERSION='0.8.30';                         # https://semver.org/
 our $VERSION_DATE='9 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -1515,7 +1515,7 @@ B<-S>/B<--smart-case>, and aliases) specify how case is matched. They override
 each another, the last one on the command line takes precedence.
 
 Both long & short options B<-s>/B<--case-sensitive> are used by B<ag> (The
-Silver Searcher), and B<rg> (ripgrep). Other grep tools use either
+Silver Searcher), and B<rg> (ripgrep). Other grep utilities use either
 B<-I>/B<--no-ignore-case>, or B<--no-smart-case>. For convenience these are all
 supported by B<zdb>, though, B<-s>/B<--case-sensitive> is preferred for
 clarity.
@@ -1567,8 +1567,10 @@ ways too, for example by prefixing it with C<,> or using the B<--> option.)
 If this option is repeated, the I<QUERY>(s) are OR:ed together. This means that
 a record will be considered matching if one (or more) of the I<QUERY>(s) match.
 
-Short option B<-e> is used by B<grep>, B<sed>, B<awk>; long option B<--match>
-by B<ack>.
+Short option B<-e> is used by B<grep>, B<sed>, B<awk>, B<perl>, B<node> (and
+many programming languages, except shells and Python, which prefers B<-c>);
+long option B<--match> is used by B<ack> (B<node> uses the long option
+B<--eval>, which might be appropriate for B<zdb> too?)
 
 =item B<-h>, B<--help>
 
@@ -1616,7 +1618,7 @@ documentation), and does not exist as a separate manpage file. (TODO: See
 L</Show manpage using B<$MANPAGER>>;
 
 Long & short options B<-M>/B<--manual> are used by B<curl>, while B<--man> is
-used by the Perl tools B<ack> and B<prove>.
+used by the Perl utilities B<ack> and B<prove>.
 
 =item B<--pager=>I<CMD> (default C<B<pager>>)
 
@@ -1682,8 +1684,8 @@ Alias for B<-s>/B<--case-sensitive>. Exists only for compatibility.
 
 Long option B<--no-smart-case> is used by B<ack>, and B<sift>. (B<ucg>
 [UniversalCodeGrep] uses the ugly looking B<--nosmart-case>. B<sift> uses short
-option B<-S> as a synonym, but all other tools, including B<zdb>, use B<-S> for
-B<--smart-case>.)
+option B<-S> as a synonym, but all other utilities, including B<zdb>, use B<-S>
+for B<--smart-case>.)
 
 =item B<--test>
 
@@ -1876,19 +1878,19 @@ FIXME: Add missing error messages
 =item Can't exec 'man': I<REASON>
 
 This resulted from C<< zdb --manual >> not being able to find or execute the
-B<man> viewer needed to show the manpage. On my Linux machine the B<man> tool
-is installed by default (and is available in the Debian B<man-db> package). If
-worst comes to worst, the documentation is viewable (in the fairly readable
-'POD' format) by looking at the program 'binary' as well.
+B<man> viewer needed to show the manpage. On my Linux machine the B<man>
+utility is installed by default (and is available in the Debian B<man-db>
+package). If worst comes to worst, the documentation is viewable (in the fairly
+readable 'POD' format) by looking at the program 'binary' as well.
 
 =item Can't exec 'pod2man': I<REASON>
 
 =item Command 'pod2man' failed: I<REASON>
 
 This resulted from C<< zdb --manual >> not being able to find or execute the
-Perl tool B<pod2man>, which is used to generate the manpage. This tool comes
-with the standard Perl installation, but the documentation can also be found
-inside the B<zdb> source code itself (and is fairly readable).
+Perl utility B<pod2man>, which is used to generate the manpage. This utility
+comes with the standard Perl installation, but the documentation can also be
+found inside the B<zdb> source code itself (and is fairly readable).
 
 =back
 
@@ -2261,12 +2263,12 @@ read/decode).
 
 =head2 Encryption
 
-(Pipe input/output through external secure tool) (also, how make THESE diffs
-secure -- encrypted archive of some kind?).
+(Pipe input/output through an external secure utility) (also, how make THESE
+diffs secure -- encrypted archive of some kind?).
 
-The command line tool B<age> (in Debian package of same name) should be useful
-here. The following commands allow input on standard input, and output on
-standard output making them ideal to feed a database through them.
+The command B<age> (in Debian package of same name) should be useful here. The
+following commands allow input on standard input, and output on standard output
+making them ideal to feed a database through them.
 
 =over 9
 
@@ -2288,7 +2290,7 @@ B<zdb>.
 Also, the B<age> ASCII armored format does not allow for leading and trailing
 extra data, so a shebang line would have to be inserted/filtered out by B<zdb>
 itself (which also makes the file less usable/recoverable for use outside with
-other tools than B<zdb>).
+other utilities than B<zdb>).
 
 Additionally, it'd be kinda nice to compress the datastream before encrypting
 it. The compression schema should be specifiable when writing the file, chosen
@@ -2661,6 +2663,9 @@ B<0.8.28> - BUGFIX: Don't clobber database when insert fails. (2026-01-08
 B<0.8.29> - BUGFIX: Die() if writing to output file fails. (2026-01-09
 07:54--07:59)
 
+B<0.8.30> - Minor docs update, added webpage & minor README updates.
+(2026-01-09 08:21--09:46)
+
 
 =head1 INTERNALS
 
@@ -2866,12 +2871,12 @@ with the name of the database file tucked onto the end of the command line.
 
 =head1 AUTHOR
 
-Copyright (C) 1998--2026 zrajm <zrajm@klingonska.org>.
+Copyright (C) 1998--2026 zrajm <zdb@zrajm.org>.
 
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2025--2026, zrajm L<zrajm@klingonska.org>. ZDB file format copyright
+Copyright 2025--2026, zrajm L<zdb@zrajm.org>. ZDB file format copyright
 1998--2026 by zrajm and Klingonska Akademien (Uppsala, Sweden).
 L<https://klingonska.org>.
 
@@ -2883,16 +2888,15 @@ law. (See also C<zdb --version>.)
 
 =head1 SEE ALSO
 
-B<zdb> is partly inspired by GNU B<recutils>. -- When I first heard about
-B<recutils> I was delighted to find that its file format it is strikingly
-similar to the plain-text 'database' format I've used for my Klingon dictionary
-since the very end of the last century (see
-L<https://klingonska.org/dict/dict.zdb>). I was to a large degree inspired by
-the shortcomings of B<recutils> -- its query language is verbose and pretty
-inflexible (I felt I could do better!), and B<recutils> does not highlight
-matches.
+B<zdb> is inspired by GNU B<recutils>, and by the minimal text database format
+I myself created (back in 1998) for my Klingon dictionary project
+(L<https://klingonska.org/dict/dict.zdb>).
 
-Hence, this little project! :)
+B<zdb> improves on B<recutils> by using a single central command (instead of
+separate commands for every operation), a more compact search query language,
+highlighting search matches, etc.
+
+<https://zrajm.org/zdb>
 
 =cut
 
