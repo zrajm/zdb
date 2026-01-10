@@ -36,16 +36,6 @@
 * TODO `--show-query` -- to show cleaned up query (without searching)
   What would the option be called? `--show-query`?
 
-  Note that the current `--verbose` option does not add parentheses every time
-  they are needed. In the following query the shown output is incorrect, as the
-  removal of the parentheses in the OR:ed part of the query changes the
-  meaning. (The correct output is `(batlh,quv) principles`.)
-
-  ----------------------------------------
-  zdb --verbose '(batlh, quv) principles' klingon.zdb | grep QUERY
-  QUERY: batlh,quv principles
-  ----------------------------------------
-
   The normalized query should be shown. -- It is not totally obvious that this
   is the best version to show, since the normalized version might LONGER than
   what the user inputted (for example, `-=(a b c)` becomes `-=a, -=b, -=c`) --

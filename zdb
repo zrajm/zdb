@@ -10,8 +10,8 @@ use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
 use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zdb@zrajm.org>';
-our $VERSION='0.8.31';                         # https://semver.org/
-our $VERSION_DATE='9 January 2026';
+our $VERSION='0.8.32';                         # https://semver.org/
+our $VERSION_DATE='10 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -524,7 +524,11 @@ sub highlight {
     }
     sub _atom_dumper { my $x = _prefix('',                     @_); sub { $x } }
     sub  _and_dumper { my $x = _prefix(' ', shift, map $_->(), @_); sub { $x } }
-    sub   _or_dumper { my $x = _prefix(',', shift, map $_->(), @_); sub { $x } }
+    sub   _or_dumper {
+        my $depth = $_[0]->{depth};
+        my $x = _prefix(',', shift, map $_->(), @_);
+        sub { $depth ? "($x)" : $x };
+    }
 
     sub _regexify {
         my ($opt, @str) = @_;
@@ -686,14 +690,15 @@ sub highlight {
     # value match. The query function returns either an array of highlight
     # positions (if were matches found), or undef (if no matches were found).
     sub _compile {
-        my ($term, $opt) = @_;
+        my ($term, $opt, $depth) = @_;
         return $term unless ref($term);
         my ($meta, @data) = @$term;
         my $type = $meta->{type};
         my $func = $opt->{lang}{$type}
             // die "Unknown query term type: '$type'\n";
         $meta->{case} //= $opt->{case};
-        return $func->($meta, map { _compile($_, $opt) } @data);
+        $meta->{depth}  = $depth // 0;
+        return $func->($meta, map { _compile($_, $opt, ++$depth) } @data);
     }
 
     sub filter_stdout {
@@ -2665,6 +2670,9 @@ B<0.8.30> - Minor docs update, added webpage & minor README updates.
 
 B<0.8.31> - Updated unit tests to include query normalization and application
 of De Morgan's Law. (2026-01-09 13:40--14:01)
+
+B<0.8.32> - Fixed parentheses in the 'QUERY' debug output. (2026-01-10
+14:18--15:00)
 
 
 =head1 INTERNALS
