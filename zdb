@@ -10,8 +10,8 @@ use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
 use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zdb@zrajm.org>';
-our $VERSION='0.8.32';                         # https://semver.org/
-our $VERSION_DATE='10 January 2026';
+our $VERSION='0.8.33';                         # https://semver.org/
+our $VERSION_DATE='11 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -380,6 +380,11 @@ sub highlight {
         }
         return $self;
     }
+    sub result {
+        my ($self) = @_;
+        $self->pop(1) until @$self == 1;
+        return $self->[0][0];
+    }
 }
 {
     package Query;
@@ -493,8 +498,7 @@ sub highlight {
                 'STACK: ', debug($stack), "\n")
                 if $opt{verbose};
         }
-        $stack->pop(1) until @$stack == 1;
-        return $stack->[0][0];
+        return $stack->result();
     }
 
     # Normalize '-' ('not') and '=' ('field') prefixes in query by pushing them
@@ -2673,6 +2677,8 @@ of De Morgan's Law. (2026-01-09 13:40--14:01)
 
 B<0.8.32> - Fixed parentheses in the 'QUERY' debug output. (2026-01-10
 14:18--15:00)
+
+B<0.8.33> - Minor cleanup of Query::Stack. (2026-01-11 20:06--20:22)
 
 
 =head1 INTERNALS
