@@ -10,7 +10,7 @@ use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
 use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zdb@zrajm.org>';
-our $VERSION='0.8.33';                         # https://semver.org/
+our $VERSION='0.8.34';                         # https://semver.org/
 our $VERSION_DATE='11 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -318,9 +318,9 @@ sub highlight {
     );
     sub new {
         my ($class) = @_;
-        return bless([[]], $class);
+        return bless({ stack => [[]] }, $class);
     }
-    sub peek { return shift()->[-1]         }  # get last stack item
+    sub peek { return shift()->{stack}[-1]  }  # get last stack item
     sub last { return shift()->peek()->[-1] }  # last atom in last stack item
     # Set metadata options for last stack entry.
     sub set {
@@ -344,8 +344,8 @@ sub highlight {
         $self->trim();
         for (@thing) {
             $_ = $paren{$_}() if $paren{$_};   # expand 'and', 'or' etc.
-            push(@{$self->[-1]}, $_);          # add to query
-            push(@$self, $_)                   # push parenthesis to stack
+            push(@{$self->{stack}[-1]}, $_);   # add to query
+            push(@{$self->{stack}}, $_)        # push parenthesis to stack
                 if $_->[0]{type} ne 'atom';
         }
         return $self;
@@ -353,7 +353,7 @@ sub highlight {
     sub pop {                                  # get last entry (and remove)
         my ($self, $done) = @_;
         $self->trim();
-        my $popped = pop @$self;
+        my $popped = pop @{$self->{stack}};
 
         # If popped term contains parenthesis with a single term, remove
         # parenthesis (but keep the term inside). Also combine 'not' and
@@ -373,17 +373,17 @@ sub highlight {
         # business below).
         #
         # Make stack bottomless (to allow for unmatched ')' in query).
-        if (@$self == 1) {                     # only QUERY left in stack
+        if (@{$self->{stack}} == 1) {          # only QUERY left in stack
             $self->push('or', 'and');          #   add or(and(...)) parentheses
-            $self->push($self->[0][0]);        #   and put QUERY inside that
-            shift(@{$self->[0]});
+            $self->push($self->{stack}[0][0]); #   and put QUERY inside that
+            shift(@{$self->{stack}[0]});
         }
         return $self;
     }
     sub result {
         my ($self) = @_;
-        $self->pop(1) until @$self == 1;
-        return $self->[0][0];
+        $self->pop(1) until @{$self->{stack}} == 1;
+        return $self->{stack}[0][0];
     }
 }
 {
@@ -487,7 +487,7 @@ sub highlight {
                 push(@$last, $special{$chr} // quotemeta($chr));
             },
         );
-        say "STACK: ", debug($stack) if $opt{verbose};
+        say "STACK: ", debug($stack->{stack}) if $opt{verbose};
         for my $chr ($query_str =~ /\X/g) {  # grapheme clusters
             my $last = $stack->last();
             $machine{
@@ -495,7 +495,7 @@ sub highlight {
             }($last, $chr);
             say("----------------------------------------\n",
                 "READ : '$chr'\n",
-                'STACK: ', debug($stack), "\n")
+                'STACK: ', debug($stack->{stack}), "\n")
                 if $opt{verbose};
         }
         return $stack->result();
@@ -2679,6 +2679,9 @@ B<0.8.32> - Fixed parentheses in the 'QUERY' debug output. (2026-01-10
 14:18--15:00)
 
 B<0.8.33> - Minor cleanup of Query::Stack. (2026-01-11 20:06--20:22)
+
+B<0.8.34> - Changed internal data structure in Query::Stack. (2026-01-11
+20:31-20:48)
 
 
 =head1 INTERNALS
