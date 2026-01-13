@@ -10,8 +10,8 @@ use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
 use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zdb@zrajm.org>';
-our $VERSION='0.8.34';                         # https://semver.org/
-our $VERSION_DATE='11 January 2026';
+our $VERSION='0.8.35';                         # https://semver.org/
+our $VERSION_DATE='13 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -353,16 +353,7 @@ sub highlight {
     sub pop {                                  # get last entry (and remove)
         my ($self, $done) = @_;
         $self->trim();
-        my $popped = pop @{$self->{stack}};
-
-        # If popped term contains parenthesis with a single term, remove
-        # parenthesis (but keep the term inside). Also combine 'not' and
-        # 'field' attributes from the parenthesis and the term inside.
-        if (@$popped == 2) {
-            $popped->[1][0]{field} ^= $popped->[0]{field};
-            $popped->[1][0]{not}   ^= $popped->[0]{not};
-            @$popped = @{$popped->[1]};
-        }
+        pop @{$self->{stack}};
 
         return $self if $done;                 # cleanup phase = abort
         #
@@ -374,9 +365,8 @@ sub highlight {
         #
         # Make stack bottomless (to allow for unmatched ')' in query).
         if (@{$self->{stack}} == 1) {          # only QUERY left in stack
-            $self->push('or', 'and');          #   add or(and(...)) parentheses
-            $self->push($self->{stack}[0][0]); #   and put QUERY inside that
-            shift(@{$self->{stack}[0]});
+            my $whole = shift(@{$self->{stack}[0]});
+            $self->push('or', 'and', $whole)->pop();
         }
         return $self;
     }
@@ -510,6 +500,11 @@ sub highlight {
         my ($meta, @data) = @$term;
         $not   = ($not   // 0) ^ $meta->{not};
         $field = ($field // 0) ^ $meta->{field};
+
+        # Remove paren around and/or group containing single item.
+        return _normalize($data[0], $not, $field)
+            if @data == 1 and $meta->{type} ne 'atom';
+
         return [$meta->{type} ne 'atom' ? {
             %$meta,
             type  => ($not ? $flip{$meta->{type}} : $meta->{type}),
@@ -1149,8 +1144,8 @@ sub highlight {
             query_is('a)'      => atom('a'));
             query_is('a))'     => atom('a'));
             query_is('a)b'     => and(atom('a'), atom('b')));
-            query_is('a)b)c'   => and(atom('a'), atom('b'), atom('c')));
-            query_is('a)b)c)'  => and(atom('a'), atom('b'), atom('c')));
+            query_is('a)b)c'   => and(and(atom('a'), atom('b')), atom('c')));
+            query_is('a)b)c)'  => and(and(atom('a'), atom('b')), atom('c')));
             query_is( ')b'     => atom('b'));
             query_is( '),b'    => atom('b'));
             query_is('a),'     => atom('a'));
@@ -1200,19 +1195,12 @@ sub highlight {
         subtest '2. Missing start parenthesis' => sub {
             query_is('a)' => atom('a'), '2.1');
             query_is('a b)' => and(atom('a'), atom('b')), '2.2');
-            query_is('a b) c' => and(atom('a'), atom('b'), atom('c')), '2.3');
-            TODO "EXPECTED (should work, but doesn't)" => sub {
-                query_is('a, b) c'  => and(or(atom('a'), atom('b')), atom('c')), '2.4');
-                query_is('a b), c' => or(and(atom('a'), atom('b')), atom('c')), '2.5');
-                query_is('a, b), c' => or(or(atom('a'), atom('b')), atom('c')), '2.6');
-                query_is('a, b), c d' => or(or(atom('a'), atom('b')), and(atom('c'), atom('d'))), '2.7');
-                query_is('a, b) (c, d)' => and(or(atom('a'), atom('b')), or(atom('c'), atom('d'))), '2.8');
-            };
-            query_is('(a, b) c' => and(or(atom('a'), atom('b')), atom('c')), '2.4b INCORRECT -- replace by above TODO');
-            query_is('(a b), c' => or(and(atom('a'), atom('b')), atom('c')), '2.5b INCORRECT -- replace by above TODO');
-            query_is('(a, b), c' => or(or(atom('a'), atom('b')), atom('c')), '2.6b INCORRECT -- replace by above TODO');
-            query_is('(a, b), c d' => or(or(atom('a'), atom('b')), and(atom('c'), atom('d'))), '2.7b INCORRECT -- replace by above TODO');
-            query_is('(a, b) (c, d)' => and(or(atom('a'), atom('b')), or(atom('c'), atom('d'))), '2.8b INCORRECT -- replace by above TODO');
+            query_is('a b) c' => and(and(atom('a'), atom('b')), atom('c')), '2.3');
+            query_is('a, b) c'  => and(or(atom('a'), atom('b')), atom('c')), '2.4');
+            query_is('a b), c' => or(and(atom('a'), atom('b')), atom('c')), '2.5');
+            query_is('a, b), c' => or(or(atom('a'), atom('b')), atom('c')), '2.6');
+            query_is('a, b), c d' => or(or(atom('a'), atom('b')), and(atom('c'), atom('d'))), '2.7');
+            query_is('a, b) (c, d)' => and(or(atom('a'), atom('b')), or(atom('c'), atom('d'))), '2.8');
         };
         subtest '3. Missing end parenthesis' => sub {
             query_is('(a' => atom('a'), '3.1');
@@ -1232,10 +1220,7 @@ sub highlight {
             query_is('(a, b) (c, d' => and(or(atom('a'), atom('b')), or(atom('c'), atom('d'))), '3.8');
         };
         subtest '4. Explicit parens' => sub {
-            TODO "EXPECTED (should work, but doesn't)" => sub {
-                query_is('a, b) c' => and(or(atom('a'), atom('b')), atom('c')), '4.1');
-            };
-            query_is('(a, b) c' => and(or(atom('a'), atom('b')), atom('c')), '4.1b INCORRECT -- replace by above TODO');
+            query_is('a, b) c' => and(or(atom('a'), atom('b')), atom('c')), '4.1');
             query_is('a, b c' => or(atom('a'), and(atom('b'), atom('c'))), '4.2');
             query_is('a b, c' => or(and(atom('a'), atom('b')), atom('c')), '4.3');
             query_is('(a b), c' => or(and(atom('a'), atom('b')), atom('c')), '4.4');
@@ -1988,11 +1973,6 @@ The prefix C<B<^>> should be added. It should toggle exact case matching for
 any individual search term. Thus C<B<^Scandinavia>> can be used to specify that
 only the capitalized version of the word should be matched.
 
-=item B<BUG:> Fix implicit leading parentheses
-
-Applies mostly to missing B<(> at beginning of query string, but also (to lesser
-degree) to missing B<)> at the end.---See failing unit tests.
-
 =item Unwrap parentheses with same AND/OR as parent
 
 Nice-to-have, but not really B<important> in any way (if implemented queries
@@ -2681,7 +2661,10 @@ B<0.8.32> - Fixed parentheses in the 'QUERY' debug output. (2026-01-10
 B<0.8.33> - Minor cleanup of Query::Stack. (2026-01-11 20:06--20:22)
 
 B<0.8.34> - Changed internal data structure in Query::Stack. (2026-01-11
-20:31-20:48)
+20:31--20:48)
+
+B<0.8.35> - Support for missing start parentheses C<B<(>> in query. (2026-01-13
+21:32--22:39)
 
 
 =head1 INTERNALS

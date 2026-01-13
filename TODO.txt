@@ -22,7 +22,16 @@
       ----------------------------------------
       zdb 'batlh' hi=nono klingon.zdb
       ----------------------------------------
-* TODO Query with missing leading parenthesis should work               :BUG:
+* DONE Query with missing start parentheses                             :BUG:
+  CLOSED: [2026-01-13 Tue 22:39]
+  A query "a)" should be perfectly valid.
+* TODO Argument starting with /-\W/ should be taken for QUERY
+  Instead of giving an 'Unknown option' error.
+  -------------------------------------------------
+  $ zdb '-(hej'
+  zdb: Unknown option '-('
+  Try 'zdb --help' for more information.
+  ----------------------------------------
 * TODO Database syntax -- only allow '\t' for indent
   The use of <space> for indentation makes almost all normal text files into
   valid ZDB files which makes far to easy to accidentally/unintentionally
@@ -31,6 +40,13 @@
 * TODO Add query prefix '^' (case sensitivity)
   Also change --smart-match so that an upper case letter will affect the
   matching of that specific search term, but not the whole query.
+
+  Currently the following command case-sensitively finds (only) {poq}. But it
+  should find both {poq} AND {poQ} (the capital 'Q' should only cause the
+  matching of 'QQ' itself to become case-sensitive).
+  ----------------------------------------
+  zdb 'QQ,{poq}' klingon.zdb
+  ----------------------------------------
 * TODO Support multiple queries (using -e)
   These should, just like for grep, be combined using OR.
 * TODO `--show-query` -- to show cleaned up query (without searching)
