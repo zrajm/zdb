@@ -10,7 +10,7 @@ use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
 use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zdb@zrajm.org>';
-our $VERSION='0.8.36';                         # https://semver.org/
+our $VERSION='0.8.37';                         # https://semver.org/
 our $VERSION_DATE='15 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -494,27 +494,29 @@ sub highlight {
     # Normalize '-' ('not') and '=' ('field') prefixes in query by pushing them
     # out into the leaf nodes, this converts query to Negation Normal Form.
     sub _normalize {
-        my ($term, $not, $field) = @_;
-        return $term unless ref $term;         # not parenthesis/atom
-        state %flip = (and => 'or', or => 'and');
+        my ($term, %opt) = @_;
         my ($meta, @data) = @$term;
-        $not   = ($not   // 0) ^ $meta->{not};
-        $field = ($field // 0) ^ $meta->{field};
+        my $type = $meta->{type};
+        my %new = (
+            not   => ($opt{not}   // 0) ^ $meta->{not},
+            field => ($opt{field} // 0) ^ $meta->{field},
+        );
+        # For atoms, set metadata.
+        return [{ %new, type => 'atom' }, @data] if $meta->{type} eq 'atom';
 
         # Remove paren around and/or group containing single item.
-        return _normalize($data[0], $not, $field)
-            if @data == 1 and $meta->{type} ne 'atom';
+        return map { _normalize($_, %new, type => $opt{type}) } @data
+            if @data == 1;
 
-        return [$meta->{type} ne 'atom' ? {
-            %$meta,
-            type  => ($not ? $flip{$meta->{type}} : $meta->{type}),
+        # Normal parentheses. Move operators toward leaf node, and remove them
+        # from the parenthesis itself. If negated, flip AND <-> OR (applying De
+        # Morgan's Law).
+        state %flip = qw/and or or and/;
+        return [{
+            type  => ($new{not} ? $flip{$type} : $type),
             not   => 0,
             field => 0,
-        } : {
-            %$meta,
-            not   => $not,
-            field => $field,
-        }, map { _normalize($_, $not, $field) } @data];
+        }, map { _normalize($_, %new, type => $type) } @data];
     }
 
     sub _prefix {
@@ -824,7 +826,7 @@ sub highlight {
         state sub atom {
             my ($atom, %opt) = @_;
             return [
-                { type => 'atom', field => 0, not => 0, quote => '', %opt },
+                { type => 'atom', field => 0, not => 0, %opt },
                 map { quotemeta $_ } ($atom // '') =~ /\X/gu,
             ];
         }
@@ -841,22 +843,22 @@ sub highlight {
                 is_deeply(_normalize(neg(field(atom()))), neg(field(atom())), '«-=x»');
             };
             subtest "Atoms + 'not' arg (=set 'not' attribute)" => sub {
-                is_deeply(_normalize(atom(), 1), neg(atom()), '«x» -> «-x»');
-                is_deeply(_normalize(neg(atom()), 1), atom(), '«-x» -> «x»');
-                is_deeply(_normalize(field(atom()), 1), neg(field(atom())), '«=x» -> «-=x»');
-                is_deeply(_normalize(neg(field(atom())), 1), field(atom()), '«-=x» -> «=x»');
+                is_deeply(_normalize(atom(), not => 1), neg(atom()), '«x» -> «-x»');
+                is_deeply(_normalize(neg(atom()), not => 1), atom(), '«-x» -> «x»');
+                is_deeply(_normalize(field(atom()), not => 1), neg(field(atom())), '«=x» -> «-=x»');
+                is_deeply(_normalize(neg(field(atom())), not => 1), field(atom()), '«-=x» -> «=x»');
             };
             subtest "Atoms + 'field' arg (=set 'field' attribute)" => sub {
-                is_deeply(_normalize(atom(), 0, 1), field(atom()), '«x» -> «=x»');
-                is_deeply(_normalize(neg(atom()), 0, 1), neg(field(atom())), '«-x» -> «-=x»');
-                is_deeply(_normalize(field(atom()), 0, 1), atom(), '«=x» -> «x»');
-                is_deeply(_normalize(neg(field(atom())), 0, 1), neg(atom()), '«-=x» -> «-x»');
+                is_deeply(_normalize(atom(), field => 1), field(atom()), '«x» -> «=x»');
+                is_deeply(_normalize(neg(atom()), field => 1), neg(field(atom())), '«-x» -> «-=x»');
+                is_deeply(_normalize(field(atom()), field => 1), atom(), '«=x» -> «x»');
+                is_deeply(_normalize(neg(field(atom())), field => 1), neg(atom()), '«-=x» -> «-x»');
             };
             subtest "Atoms + both 'not' and 'field' arg (=set both attributes)" => sub {
-                is_deeply(_normalize(atom(), 1, 1), neg(field(atom())), '«x» -> «-=x»');
-                is_deeply(_normalize(neg(atom()), 1, 1), field(atom()), '«-x» -> «=x»');
-                is_deeply(_normalize(field(atom()), 1, 1), neg(atom()), '«=x» -> «-x»');
-                is_deeply(_normalize(neg(field(atom())), 1, 1), atom(), '«-=x» -> «x»');
+                is_deeply(_normalize(atom(), not => 1, field => 1), neg(field(atom())), '«x» -> «-=x»');
+                is_deeply(_normalize(neg(atom()), not => 1, field => 1), field(atom()), '«-x» -> «=x»');
+                is_deeply(_normalize(field(atom()), not => 1, field => 1), neg(atom()), '«=x» -> «-x»');
+                is_deeply(_normalize(neg(field(atom())), not => 1, field => 1), atom(), '«-=x» -> «x»');
             };
             subtest "Simple parentheses (De Morgan's Law + 'field' attribute)" => sub {
                 is_deeply(_normalize(      and(atom('a'),    neg(atom('b')) )), and(      atom('a'),    neg(atom('b'))), '« ( a -b)» -> «( a -b)»');
@@ -2668,6 +2670,8 @@ B<0.8.35> - Support for missing start parentheses C<B<(>> in query. (2026-01-13
 
 B<0.8.36> - Make test function query_is() accept array return value.
 (2026-01-15 15:09--15:16)
+
+B<0.8.37> - Refactored _normalize(). (2026-01-15 15:18--15:36)
 
 
 =head1 INTERNALS
