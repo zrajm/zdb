@@ -25,6 +25,25 @@
 * DONE Query with missing start parentheses                             :BUG:
   CLOSED: [2026-01-13 Tue 22:39]
   A query "a)" should be perfectly valid.
+* TODO Flatten unnecessary parentheses in query
+  A search containing parentheses should be flattened if possible. That is, for
+  (non-negated) parentheses with the SAME operator as its surroundings the
+  parenthesis should be flattened (the parenthesis removed, but its content
+  kept). While for negated parentheses with the OPPOSITE operator as its
+  surroundings, the parenthesis should be flattened and the operator inside
+  flipped, and each term inside negated.
+
+  For example:
+  ----------------------------------------
+  + 'a  (b c)' -> 'a  b  c'
+  + 'a -(b,c)' -> 'a -b -c'
+  ----------------------------------------
+
+  Parentheses not living up to the condition should be kept.
+  ----------------------------------------
+  + 'a  (b,c)' -> 'a ( b, c)'
+  + 'a -(b c)' -> 'a (-b -c)'
+  ----------------------------------------
 * TODO Argument starting with /-\W/ should be taken for QUERY
   Instead of giving an 'Unknown option' error.
   -------------------------------------------------

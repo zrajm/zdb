@@ -10,8 +10,8 @@ use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
 use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zdb@zrajm.org>';
-our $VERSION='0.8.37';                         # https://semver.org/
-our $VERSION_DATE='15 January 2026';
+our $VERSION='0.8.38';                         # https://semver.org/
+our $VERSION_DATE='16 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -869,6 +869,142 @@ sub highlight {
                 is_deeply(_normalize(field(and(atom('a'),  field(atom('b'))))), and(field(atom('a')),       atom('b') ), '«=( a =b)» -> «(=a  b)»');
                 is_deeply(_normalize(       or(atom('a'),  field(atom('b')) )),  or(      atom('a'),  field(atom('b'))), '« ( a,=b)» -> «( a,=b)»');
                 is_deeply(_normalize(field( or(atom('a'),  field(atom('b'))))),  or(field(atom('a')),       atom('b') ), '«=( a,=b)» -> «(=a, b)»');
+                TODO "Flatten non-negated parenthesis" => sub {
+                    is_deeply(
+                        _normalize(and(atom('a'), and(atom('b'), atom('c'))))
+                        => and(atom('a'), atom('b'), atom('c'))
+                        => ("«(a (b c))» -> «(a b c)» " .
+                            "Flatten non-negated AND paren inside non-negated AND paren"));
+                };
+                is_deeply(
+                    _normalize(and(atom('a'), and(atom('b'), atom('c'))))
+                    => and(atom('a'), and(atom('b'), atom('c')))
+                    => ("«(a (b c))» -> «(a (b c))» " .
+                        "Keep non-negated AND paren inside non-negated AND paren"));
+                is_deeply(
+                    _normalize(and(atom('a'), or(atom('b'), atom('c'))))
+                    => and(atom('a'), or(atom('b'), atom('c')))
+                    => ("«(a (b, c))» -> «(a (b, c))» " .
+                        "Keep non-negated OR paren inside non-negated AND paren"));
+                is_deeply(
+                    _normalize(and(atom('a'), neg(and(atom('b'), atom('c')))))
+                    => and(atom('a'), or(neg(atom('b')), neg(atom('c'))))
+                    => ("«(a -(b c))» -> «(a (-b, -c))» " .
+                        "Keep negated AND paren inside non-negated AND paren"));
+                TODO "Flatten negated parenthesis" => sub {
+                    is_deeply(
+                        _normalize(and(atom('a'), neg(or(atom('b'), atom('c')))))
+                        => and(atom('a'), neg(atom('b')), neg(atom('c')))
+                        => ("«(a -(b, c))» -> «(a -b -c)» " .
+                            "Flatten negated OR paren inside non-negated AND paren"));
+                };
+                is_deeply(
+                    _normalize(and(atom('a'), neg(or(atom('b'), atom('c')))))
+                    => and(atom('a'), and(neg(atom('b')), neg(atom('c'))))
+                    => ("«(a -(b, c))» -> «(a (-b -c))» " .
+                        "Keep negated OR paren inside non-negated AND paren"));
+                is_deeply(
+                    _normalize(or(atom('a'), and(atom('b'), atom('c'))))
+                    => or(atom('a'), and(atom('b'), atom('c')))
+                    => ("«(a, (b c))» -> «(a, (b c))» " .
+                        "Keep non-negated AND paren inside non-negated OR paren"));
+                TODO "Flatten non-negated parenthesis" => sub {
+                    is_deeply(
+                        _normalize(or(atom('a'), or(atom('b'), atom('c'))))
+                        => or(atom('a'), atom('b'), atom('c'))
+                        => ("«(a, (b, c))» -> «(a, b, c)» " .
+                            "Flatten non-negated OR paren inside non-negated OR paren"));
+                };
+                is_deeply(
+                    _normalize(or(atom('a'), or(atom('b'), atom('c'))))
+                    => or(atom('a'), or(atom('b'), atom('c')))
+                    => ("«(a, (b, c))» -> «(a, (b, c))» " .
+                        "Keep non-negated OR paren inside non-negated OR paren"));
+                TODO "Flatten negated parenthesis" => sub {
+                    is_deeply(
+                        _normalize(or(atom('a'), neg(and(atom('b'), atom('c')))))
+                        => or(atom('a'), neg(atom('b')), neg(atom('c')))
+                        => ("«(a, -(b c))» -> «(a, -b, -c)» " .
+                            "Flatten negated AND paren inside non-negated OR paren"));
+                };
+                is_deeply(
+                    _normalize(or(atom('a'), neg(and(atom('b'), atom('c')))))
+                    => or(atom('a'), or(neg(atom('b')), neg(atom('c'))))
+                    => ("«(a, -(b c))» -> «(a, (-b, -c))» " .
+                        "Keep negated AND paren inside non-negated OR paren"));
+                is_deeply(
+                    _normalize(or(atom('a'), neg(or(atom('b'), atom('c')))))
+                    => or(atom('a'), and(neg(atom('b')), neg(atom('c'))))
+                    => ("«(a, -(b, c))» -> «(a, (-b -c))» " .
+                        "Keep negated OR paren inside non-negated OR paren"));
+                TODO "Flatten non-negated parenthesis" => sub {
+                    is_deeply(
+                        _normalize(neg(and(atom('a'), and(atom('b'), atom('c')))))
+                        => or(neg(atom('a')), neg(atom('b')), neg(atom('c')))
+                        => ("«-(a (b c))» -> «(-a, -b, -c)» " .
+                            "Flatten non-negated AND paren inside negated AND paren"));
+                };
+                is_deeply(
+                    _normalize(neg(and(atom('a'), and(atom('b'), atom('c')))))
+                    => or(neg(atom('a')), or(neg(atom('b')), neg(atom('c'))))
+                    => ("«-(a (b c))» -> «(-a, (-b, -c))» " .
+                        "Keep non-negated AND paren inside negated AND paren"));
+                is_deeply(
+                    _normalize(neg(and(atom('a'), or(atom('b'), atom('c')))))
+                    => or(neg(atom('a')), and(neg(atom('b')), neg(atom('c'))))
+                    => ("«-(a (b, c))» -> «(-a, (-b -c))» " .
+                        "Keep non-negated OR paren inside negated AND paren"));
+                is_deeply(
+                    _normalize(neg(and(atom('a'), neg(and(atom('b'), atom('c'))))))
+                    => or(neg(atom('a')), and(atom('b'), atom('c')))
+                    => ("«-(a -(b c))» -> «(-a, (b c))» " .
+                        "Keep negated AND paren inside negated AND paren"));
+                TODO "Flatten negated parenthesis" => sub {
+                    is_deeply(
+                        _normalize(neg(and(atom('a'), neg(or(atom('b'), atom('c'))))))
+                        => or(neg(atom('a')), atom('b'), atom('c'))
+                        => ("«-(a -(b, c))» -> «(-a, b, c)» " .
+                            "Flatten negated OR paren inside negated AND paren"));
+                };
+                is_deeply(
+                    _normalize(neg(and(atom('a'), neg(or(atom('b'), atom('c'))))))
+                    => or(neg(atom('a')), or(atom('b'), atom('c')))
+                    => ("«-(a -(b, c))» -> «(-a, (b, c))» " .
+                        "Keep negated OR paren inside negated AND paren"));
+                is_deeply(
+                    _normalize(neg(or(atom('a'), and(atom('b'), atom('c')))))
+                    => and(neg(atom('a')), or(neg(atom('b')), neg(atom('c'))))
+                    => ("«-(a, (b c))» -> «(-a (-b, -c))» " .
+                        "Keep non-negated AND paren inside negated OR paren"));
+                TODO "Flatten non-negated parenthesis" => sub {
+                    is_deeply(
+                        _normalize(neg(or(atom('a'), or(atom('b'), atom('c')))))
+                        => and(neg(atom('a')), neg(atom('b')), neg(atom('c')))
+                        => ("«-(a, (b, c))» -> «(-a -b -c)» " .
+                            "Flatten non-negated OR paren inside negated OR paren"));
+                };
+                is_deeply(
+                    _normalize(neg(or(atom('a'), or(atom('b'), atom('c')))))
+                    => and(neg(atom('a')), and(neg(atom('b')), neg(atom('c'))))
+                    => ("«-(a, (b, c))» -> «(-a (-b -c))» " .
+                        "Keep non-negated OR paren inside negated OR paren"));
+                TODO "Flatten negated parenthesis" => sub {
+                    is_deeply(
+                        _normalize(neg(or(atom('a'), neg(and(atom('b'), atom('c'))))))
+                        => and(neg(atom('a')), atom('b'), atom('c'))
+                        => ("«-(a, -(b c))» -> «(-a b c)» " .
+                            "Flatten negated AND paren inside negated OR paren"));
+                };
+                is_deeply(
+                    _normalize(neg(or(atom('a'), neg(and(atom('b'), atom('c'))))))
+                    => and(neg(atom('a')), and(atom('b'), atom('c')))
+                    => ("«-(a, -(b c))» -> «(-a (b c))» " .
+                        "Keep negated AND paren inside negated OR paren"));
+                is_deeply(
+                    _normalize(neg(or(atom('a'), neg(or(atom('b'), atom('c'))))))
+                    => and(neg(atom('a')), or(atom('b'), atom('c')))
+                    => ("«-(a, -(b, c))» -> «(-a (b, c))» " .
+                        "Keep negated OR paren inside negated OR paren"));
             };
         };
         subtest '_atom_matcher() -- word mode' => sub {
@@ -2672,6 +2808,9 @@ B<0.8.36> - Make test function query_is() accept array return value.
 (2026-01-15 15:09--15:16)
 
 B<0.8.37> - Refactored _normalize(). (2026-01-15 15:18--15:36)
+
+B<0.8.38> - Added unit tests for (negated & non-negated) parentheses inside
+parenthesis. (2026-01-15 15:42-16:17, 18:16--19:01, 2026-01-16 10:00--11:08)
 
 
 =head1 INTERNALS
