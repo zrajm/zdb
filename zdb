@@ -11,7 +11,7 @@ use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zdb@zrajm.org>';
 our $VERSION='0.8.39';                         # https://semver.org/
-our $VERSION_DATE='16 January 2026';
+our $VERSION_DATE='22 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -314,7 +314,7 @@ sub highlight {
     my %paren = ( # define query parentheses
         and  => sub { [{ type => 'and',  field => 0, not => 0 }] },
         or   => sub { [{ type => 'or',   field => 0, not => 0 }] },
-        atom => sub { [{ type => 'atom', field => 0, not => 0, quote => '' }] },
+        atom => sub { [{ type => 'atom', field => 0, not => 0 }] },
     );
     sub new {
         my ($class) = @_;
@@ -467,7 +467,10 @@ sub highlight {
             CHR => sub {
                 my ($last, $chr) = @_;
                 state %special = ('*' => '\w*', '_' => '\s+');
-                return $last->[0]{quote} = '' if $chr eq $last->[0]{quote};
+                if ($chr eq ($last->[0]{quote} // '')) {
+                    delete $last->[0]{quote};
+                    return;
+                }
                 # At the start of atom, and if not quoted.
                 if (!$last->[0]{quote} and @$last == 1) {
                     # Flip 'not' or 'field' if '-' or '=' is seen.
@@ -496,30 +499,25 @@ sub highlight {
     sub _normalize {
         my ($term, %opt) = @_;
         my ($meta, @data) = @$term;
-        my $type = $meta->{type};
-        my %new = (
-            not   => ($opt{not}   // 0) ^ $meta->{not},
-            field => ($opt{field} // 0) ^ $meta->{field},
-        );
-        # For atoms, set metadata.
-        return [{ %new, type => 'atom' }, @data] if $meta->{type} eq 'atom';
+        $meta->{not}   ^= $opt{not}   // 0;
+        $meta->{field} ^= $opt{field} // 0;
+
+        # Return atom after applying prefixes.
+        return $term if $meta->{type} eq 'atom';
+
+        # If negated parenthesis, flip Boolean operator (De Morgan's Law).
+        $meta->{type} = $meta->{type} eq 'or' ? 'and' : 'or'
+            if $meta->{not};
 
         # Flatten parenthesis if...
-        return map { _normalize($_, %new, type => $opt{type}) } @data
-            if @data == 1                      # contains single term
-            or ($opt{type} and $meta->{not}    # non-root parenthesis
-                ? $meta->{type} ne $opt{type}  #   negated, w/ different AND/OR
-                : $meta->{type} eq $opt{type});#   non-negated, w/ same AND/OR
+        return map { _normalize($_, %$meta, type => $opt{type}) } @data
+            if @data == 1                           # single term
+            or $meta->{type} eq ($opt{type} // ''); # same operator as parent
 
-        # Normal parentheses. Move operators toward leaf node, and remove them
-        # from the parenthesis itself. If negated, flip AND <-> OR (applying De
-        # Morgan's Law).
-        state %flip = qw/and or or and/;
-        return [{
-            type  => ($new{not} ? $flip{$type} : $type),
-            not   => 0,
-            field => 0,
-        }, map { _normalize($_, %new, type => $type) } @data];
+        # Otherwise return as parenthesis.
+        return [{ %$meta, not => 0, field => 0 }, map {
+            _normalize($_, %$meta);
+        } @data ];
     }
 
     sub _prefix {
@@ -1216,32 +1214,43 @@ sub highlight {
             query_is('a,-b c' => or(atom('a'), and(neg(atom('b')), atom('c'))), 'priority');
         };
         subtest 'PARENTHESIS IN QUERY' => sub {
-            query_is('(a)'     => atom('a'));
-            query_is('(a)b'    => and(atom('a'), atom('b')));
-            query_is('(a b)'   => and(atom('a'), atom('b')));
-            query_is('(a,b)'   => or(atom('a'), atom('b')));
-            query_is('((a,b))' => or(atom('a'), atom('b')));
-        };
-        subtest 'UNBALANCED PARENTHESES' => sub {
-            query_is( ') '     => or());
-            query_is( ')'      => or());
-            query_is( ') b'    => atom('b'));
-            query_is('a) b'    => and(atom('a'), atom('b')));
-            query_is('a)'      => atom('a'));
-            query_is('a))'     => atom('a'));
-            query_is('a)b'     => and(atom('a'), atom('b')));
-            query_is('a)b)c'   => and(atom('a'), atom('b'), atom('c')));
-            query_is('a)b)c)'  => and(atom('a'), atom('b'), atom('c')));
-            query_is( ')b'     => atom('b'));
-            query_is( '),b'    => atom('b'));
-            query_is('a),'     => atom('a'));
-            query_is('a),b'    => or(atom('a'), atom('b')));
-            query_is( '(b'     => atom('b'));
-            query_is('a(b'     => and(atom('a'), atom('b')));
-            query_is('((c'     => atom('c'));
-            query_is('a(b(c'   => and(atom('a'), atom('b'), atom('c')));
-            query_is('a(b(c,'  => and(atom('a'), atom('b'), atom('c')));
-            query_is('a(b,(c'  => and(atom('a'), or(atom('b'), atom('c'))));
+            my %q = (
+                ''        => or(),
+                'a'       => atom('a'),
+                'b'       => atom('b'),
+                'a b'     => and(atom('a'), atom('b')),
+                'a,b'     => or(atom('a'), atom('b')),
+                'a b c'   => and(atom('a'), atom('b'), atom('c')),
+                'a (b,c)' => and(atom('a'), or(atom('b'), atom('c'))),
+            );
+            query_is( ') '       => $q{''}, "«) » means «»");
+            query_is( ')'        => $q{''}, "«)» means «»");
+            query_is('(a)'       => $q{'a'}, "«(a)» means «a»");
+            query_is( 'a)'       => $q{'a'}, "«a)» means «a»");
+            query_is( 'a))'      => $q{'a'}, "«a))» means «a»");
+            query_is( 'a),'      => $q{'a'}, "«a),» means «a»");
+            query_is( ') b'      => $q{'b'}, "«) b» means «b»");
+            query_is(  ')b'      => $q{'b'}, "«)b» means «b»");
+            query_is( '),b'      => $q{'b'}, "«),b» means «b»");
+            query_is( '(b'       => $q{'b'}, "«(b» means «b»");
+            query_is('((b'       => $q{'b'}, "«((b» means «b»");
+            query_is('(a)b'      => $q{'a b'}, "«(a)b» means «a b»");
+            query_is( 'a)b'      => $q{'a b'}, "«a)b» means «a b»");
+            query_is( ' a(b'     => $q{'a b'}, "«a(b» means «a b»");
+            query_is( '(a b)'    => $q{'a b'}, "«(a b)» means «a b»");
+            query_is( '(a,b)'    => $q{'a,b'}, "«(a,b)» means «a,b»");
+            query_is(' a) b'     => $q{'a b'}, "«a) b» means «a b»");
+            query_is(' a),b'     => $q{'a,b'}, "«a),b» means «a,b»");
+            query_is('((a,b))'   => $q{'a,b'}, "«((a,b))» means «a,b»");
+            query_is('a)b)c'     => $q{'a b c'}, "«a)b)c» means «a b c»");
+            query_is('a)b)c)'    => $q{'a b c'}, "«a)b)c)» means «a b c»");
+            query_is('a(b(c'     => $q{'a b c'}, "«a(b(c» means «a b c»");
+            query_is('a(b(c,'    => $q{'a b c'}, "«a(b(c,» means «a b c»");
+            query_is('a(b,(c'    => $q{'a (b,c)'}, "«a(b,(c» means «a (b,c)»");
+            query_is('(((a)b)c)' => $q{'a b c'}, "«(((a)b)c)» means «a b c»");
+            query_is( '((a)b)c)' => $q{'a b c'}, "«((a)b)c)» means «a b c»");
+            query_is( '((a)b)c'  => $q{'a b c'}, "«((a)b)c» means «a b c»");
+            query_is(  '(a b)c'  => $q{'a b c'}, "«(a b)c» means «a b c»");
         };
         subtest 'QUOTED STRINGS' => sub {
             query_is('"()"'  => atom('()'));
@@ -2738,8 +2747,11 @@ B<0.8.37> - Refactored _normalize(). (2026-01-15 15:18--15:36)
 B<0.8.38> - Added unit tests for (negated & non-negated) parentheses inside
 parenthesis. (2026-01-15 15:42-16:17, 18:16--19:01, 2026-01-16 10:00--11:08)
 
-B<0.8.39> - Flatten non-negated parentheses in query. (2026-01-14 14:47--15:36,
-22:02--00:10, 2026-01-15 02:59--06:48, 2026-01-16 11:16--12:10)
+B<0.8.39> - Complete _normalize() rewrite. Now flattens all possible
+parentheses in query. (2026-01-14 14:47--15:36, 22:02--00:10, 2026-01-15
+02:59--06:48, 2026-01-16 11:16--12:10, 2026-01-20 16:04--17:18, 01:54--05:55,
+17:19--17:58, 22:50--23:46, 2026-01-21 01:36--04:04, 06:03--08:00, 2026-01-22
+16:27--16:33, 17:41--18:13)
 
 
 =head1 INTERNALS
