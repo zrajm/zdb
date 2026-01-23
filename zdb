@@ -10,8 +10,8 @@ use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
 use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zdb@zrajm.org>';
-our $VERSION='0.8.39';                         # https://semver.org/
-our $VERSION_DATE='22 January 2026';
+our $VERSION='0.8.40';                         # https://semver.org/
+our $VERSION_DATE='23 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -1196,97 +1196,162 @@ sub highlight {
             is_deeply($z, [qw/a b/],
                       "3rd callback short-circuited, don't get args");
         };
-        subtest 'QUERY BASICS' => sub {
-            query_is(''      => or());
-            query_is('a'     => atom('a'));
-            query_is('ab'    => atom('ab'));
-            query_is('-ab'   => neg(atom('ab')), 'negated');
-            query_is('--ab'  => atom('ab'), 'double negation = none');
-            query_is('---ab' => neg(atom('ab')), 'negated');
-            query_is('=ab'   => field(atom('ab')), 'field search');
-            query_is('==ab'  => atom('ab'), 'double field search = none');
-            query_is('===ab' => field(atom('ab')), 'field search');
-            query_is('a b'   => and(atom('a'), atom('b')), 'and');
-            query_is('a,b'   => or(atom('a'), atom('b')), 'or');
-            query_is('a b,c' => or(and(atom('a'), atom('b')), atom('c')), 'priority');
-            query_is('a,b c' => or(atom('a'), and(atom('b'), atom('c'))), 'priority');
-            query_is('a -b,c' => or(and(atom('a'), neg atom('b')), atom('c')), 'priority');
-            query_is('a,-b c' => or(atom('a'), and(neg(atom('b')), atom('c'))), 'priority');
-        };
-        subtest 'PARENTHESIS IN QUERY' => sub {
+        subtest 'QUERY PARSING' => sub {
             my %q = (
-                ''        => or(),
-                'a'       => atom('a'),
-                'b'       => atom('b'),
-                'a b'     => and(atom('a'), atom('b')),
-                'a,b'     => or(atom('a'), atom('b')),
-                'a b c'   => and(atom('a'), atom('b'), atom('c')),
-                'a (b,c)' => and(atom('a'), or(atom('b'), atom('c'))),
+                ''           => or(),
+                'a'          => atom('a'),
+                'ab'         => atom('ab'),
+                '-ab'        => neg(atom('ab')),
+                '=ab'        => field(atom('ab')),
+                '-a'         => neg(atom('a')),
+                'b'          => atom('b'),
+                'a b'        => and(atom('a'), atom('b')),
+                'a -b'       => and(atom('a'), neg(atom('b'))),
+                '-a b'       => and(neg(atom('a')), atom('b')),
+                '-a -b'      => and(neg(atom('a')), neg(atom('b'))),
+                'a,b'        =>  or(atom('a'), atom('b')),
+                'a,-b'       =>  or(atom('a'), neg(atom('b'))),
+                '-a,b'       =>  or(neg(atom('a')), atom('b')),
+                '-a,-b'      =>  or(neg(atom('a')), neg(atom('b'))),
+                '=a b'       => and(field(atom('a')), atom('b')),
+                '=a,b'       =>  or(field(atom('a')), atom('b')),
+                'a b c'      => and(atom('a'), atom('b'), atom('c')),
+                '=a =b c'    => and(field(atom('a')), field(atom('b')), atom('c')),
+                'a (b,c)'    => and(atom('a'), or(atom('b'), atom('c'))),
+                'a (-b,-c)'  => and(atom('a'), or(neg(atom('b')), neg(atom('c')))),
+                'a -b -c'    => and(atom('a'), neg(atom('b')), neg(atom('c'))),
+                'a,(b c)'    =>  or(atom('a'), and(atom('b'), atom('c'))),
+                'a,(-b c)'   =>  or(atom('a'), and(neg(atom('b')), atom('c'))),
+                'a,b,c'      =>  or(atom('a'), atom('b'), atom('c')),
+                'a,-b,-c'    =>  or(atom('a'), neg(atom('b')), neg(atom('c'))),
+                'a,(-b -c)'  =>  or(atom('a'), and(neg(atom('b')), neg(atom('c')))),
+                '-a,-b,-c'   =>  or(neg(atom('a')), neg(atom('b')), neg(atom('c'))),
+                '-a,(-b -c)' =>  or(neg(atom('a')), and(neg(atom('b')), neg(atom('c')))),
+                '-a,(b c)'   =>  or(neg(atom('a')), and(atom('b'), atom('c'))),
+                '-a,b,c'     =>  or(neg(atom('a')), atom('b'), atom('c')),
+                '-a (-b,-c)' => and(neg(atom('a')), or(neg(atom('b')), neg(atom('c')))),
+                '-a -b -c'   => and(neg(atom('a')), neg(atom('b')), neg(atom('c'))),
+                '-a b c'     => and(neg(atom('a')), atom('b'), atom('c')),
+                '-a (b,c)'   => and(neg(atom('a')), or(atom('b'), atom('c'))),
+                '(a b),c'    => or(and(atom('a'), atom('b')), atom('c')),
+                '(a -b),c'   => or(and(atom('a'), neg(atom('b'))), atom('c')),
             );
-            query_is( ') '       => $q{''}, "«) » means «»");
-            query_is( ')'        => $q{''}, "«)» means «»");
-            query_is('(a)'       => $q{'a'}, "«(a)» means «a»");
-            query_is( 'a)'       => $q{'a'}, "«a)» means «a»");
-            query_is( 'a))'      => $q{'a'}, "«a))» means «a»");
-            query_is( 'a),'      => $q{'a'}, "«a),» means «a»");
-            query_is( ') b'      => $q{'b'}, "«) b» means «b»");
-            query_is(  ')b'      => $q{'b'}, "«)b» means «b»");
-            query_is( '),b'      => $q{'b'}, "«),b» means «b»");
-            query_is( '(b'       => $q{'b'}, "«(b» means «b»");
-            query_is('((b'       => $q{'b'}, "«((b» means «b»");
-            query_is('(a)b'      => $q{'a b'}, "«(a)b» means «a b»");
-            query_is( 'a)b'      => $q{'a b'}, "«a)b» means «a b»");
-            query_is( ' a(b'     => $q{'a b'}, "«a(b» means «a b»");
-            query_is( '(a b)'    => $q{'a b'}, "«(a b)» means «a b»");
-            query_is( '(a,b)'    => $q{'a,b'}, "«(a,b)» means «a,b»");
-            query_is(' a) b'     => $q{'a b'}, "«a) b» means «a b»");
-            query_is(' a),b'     => $q{'a,b'}, "«a),b» means «a,b»");
-            query_is('((a,b))'   => $q{'a,b'}, "«((a,b))» means «a,b»");
-            query_is('a)b)c'     => $q{'a b c'}, "«a)b)c» means «a b c»");
-            query_is('a)b)c)'    => $q{'a b c'}, "«a)b)c)» means «a b c»");
-            query_is('a(b(c'     => $q{'a b c'}, "«a(b(c» means «a b c»");
-            query_is('a(b(c,'    => $q{'a b c'}, "«a(b(c,» means «a b c»");
-            query_is('a(b,(c'    => $q{'a (b,c)'}, "«a(b,(c» means «a (b,c)»");
-            query_is('(((a)b)c)' => $q{'a b c'}, "«(((a)b)c)» means «a b c»");
-            query_is( '((a)b)c)' => $q{'a b c'}, "«((a)b)c)» means «a b c»");
-            query_is( '((a)b)c'  => $q{'a b c'}, "«((a)b)c» means «a b c»");
-            query_is(  '(a b)c'  => $q{'a b c'}, "«(a b)c» means «a b c»");
-        };
-        subtest 'QUOTED STRINGS' => sub {
+
+            note("Repeated prefixes");
+            query_is('ab'     => $q{'ab'});
+            query_is('-ab'    => $q{'-ab'});
+            query_is('--ab'   => $q{'ab'});
+            query_is('---ab'  => $q{'-ab'});
+            query_is('=ab'    => $q{'=ab'});
+            query_is('==ab'   => $q{'ab'});
+            query_is('===ab'  => $q{'=ab'});
+
+            note("AND/OR precedence");
+            query_is('a  b,c' => $q{'(a b),c'});
+            query_is('a -b,c' => $q{'(a -b),c'});
+            query_is('a,b c'  => $q{'a,(b c)'});
+            query_is('a,-b c' => $q{'a,(-b c)'});
+
+            note("Sloppy parentheses");
+            query_is(''          => $q{''});
+            query_is( ') '       => $q{''});
+            query_is( ')'        => $q{''});
+            query_is( 'a)'       => $q{'a'});
+            query_is( 'a))'      => $q{'a'});
+            query_is( 'a),'      => $q{'a'});
+            query_is( ') b'      => $q{'b'});
+            query_is(  ')b'      => $q{'b'});
+            query_is( '),b'      => $q{'b'});
+            query_is( '(b'       => $q{'b'});
+            query_is('((b'       => $q{'b'});
+            query_is(  'a b'     => $q{'a b'});
+            query_is( '(a)b'     => $q{'a b'});
+            query_is(  'a)b'     => $q{'a b'});
+            query_is(  'a) b'    => $q{'a b'});
+            query_is(  'a(b'     => $q{'a b'});
+            query_is( '(a b)'    => $q{'a b'});
+            query_is(  'a,b'     => $q{'a,b'});
+            query_is( '(a,b)'    => $q{'a,b'});
+            query_is(' a),b'     => $q{'a,b'});
+            query_is('((a,b))'   => $q{'a,b'});
+            query_is('a)b)c'     => $q{'a b c'});
+            query_is('a)b)c)'    => $q{'a b c'});
+            query_is('a(b(c'     => $q{'a b c'});
+            query_is('a(b(c,'    => $q{'a b c'});
+            query_is('a(b,(c'    => $q{'a (b,c)'});
+            query_is('(((a)b)c)' => $q{'a b c'});
+            query_is( '((a)b)c)' => $q{'a b c'});
+            query_is( '((a)b)c'  => $q{'a b c'});
+            query_is(  '(a b)c'  => $q{'a b c'});
+
+            note("Flatten multi-term parenthesis & apply De Morgan's Law.");
+            query_is( '(a  (b c))' => $q{'a b c'});
+            query_is( '(a  (b,c))' => $q{'a (b,c)'});
+            query_is( '(a -(b c))' => $q{'a (-b,-c)'});
+            query_is( '(a -(b,c))' => $q{'a -b -c'});
+            query_is( '(a, (b c))' => $q{'a,(b c)'});
+            query_is( '(a, (b,c))' => $q{'a,b,c'});
+            query_is( '(a,-(b c))' => $q{'a,-b,-c'});
+            query_is( '(a,-(b,c))' => $q{'a,(-b -c)'});
+            query_is('-(a  (b c))' => $q{'-a,-b,-c'});
+            query_is('-(a  (b,c))' => $q{'-a,(-b -c)'});
+            query_is('-(a -(b c))' => $q{'-a,(b c)'});
+            query_is('-(a -(b,c))' => $q{'-a,b,c'});
+            query_is('-(a, (b c))' => $q{'-a (-b,-c)'});
+            query_is('-(a, (b,c))' => $q{'-a -b -c'});
+            query_is('-(a,-(b c))' => $q{'-a b c'});
+            query_is('-(a,-(b,c))' => $q{'-a (b,c)'});
+
+            note("Flatten single term parenthesis.");
+            query_is( '(a  (b))' => $q{'a b'});
+            query_is( '(a -(b))' => $q{'a -b'});
+            query_is( '(a, (b))' => $q{'a,b'});
+            query_is( '(a,-(b))' => $q{'a,-b'});
+            query_is('-(a  (b))' => $q{'-a,-b'});
+            query_is('-(a -(b))' => $q{'-a,b'});
+            query_is('-(a, (b))' => $q{'-a -b'});
+            query_is('-(a,-(b))' => $q{'-a b'});
+
+            note("Flatten empty parenthesis.");
+            query_is( '(a  ())' => $q{'a'});
+            query_is( '(a -())' => $q{'a'});
+            query_is('-(a  ())' => $q{'-a'});
+            query_is('-(a -())' => $q{'-a'});
+
+            note("Quoted strings");
             query_is('"()"'  => atom('()'));
             query_is('-"a"'  => neg(atom('a')));
             query_is('"-a"'  => atom('-a'));
             query_is('-"-a"' => neg(atom('-a')));
+
+            note("Negation prefix propagation");
+            query_is('-a'      => $q{'-a'});
+            query_is('(-)a'    => $q{'a'});
+            query_is('-(a)'    => $q{'-a'});
+            query_is('--a'     => $q{'a'});
+            query_is('-(-a)'   => $q{'a'});
+            query_is('-(a)'    => $q{'-a'});
+            query_is('-(a -b)' => $q{'-a,b'});
+            query_is('-(a,-b)' => $q{'-a b'});
+
+            note("Field prefix propagation");
+            query_is('=(a) b'   => $q{'=a b'});
+            query_is('=(a b) c' => $q{'=a =b c'});
+            query_is('=(=a)'    => $q{'a'});
+            query_is('=(a =b)'  => $q{'=a b'});
+            query_is('=(a,=b)'  => $q{'=a,b'});
         };
-        subtest 'NEGATION PROPAGATION' => sub {
-            query_is('-a'      => neg(atom('a')));
-            query_is('--a'     => atom('a'), 'means «a»');
-            query_is('-(a)'    => neg(atom('a')), 'means «-a»');
-            query_is('-(-a)'   => atom('a'), 'means «a»');
-            query_is('-(a -b)' => or(neg(atom('a')), atom('b')),
-                     'means «(-a,b)» (De Morgan\'s Law)');
-            query_is('-(a,-b)' => and(neg(atom('a')), atom('b')),
-                     'means «(-a b)» (De Morgan\'s Law)');
-        };
-        subtest 'FIELD PROPAGATION' => sub {
-            query_is('=(a)'    => field(atom('a')), 'means «=a»');
-            query_is('=(=a)'   => atom('a'), 'means «a»');
-            query_is('=(a =b)' => and(field(atom('a')), atom('b')),
-                     'means «=a b»');
-            query_is('=(a,=b)' => or(field(atom('a')), atom('b')),
-                     'means «=a,b»');
-        };
-        note("SLOPPY QUERY TESTS\n",
-             '(from https://zrajm.org/teckentranskription/lexicon-tests.html)');
-        subtest '1. Simplest tests' => sub {
+        subtest 'SLOPPY QUERY TESTS' => sub {
+            note('(from https://zrajm.org/teckentranskription/lexicon-tests.html)');
+            note('1. Simplest tests');
             query_is('a'      => atom('a'),                      '1.1');
             query_is('-a'     => neg(atom('a')),                 '1.2');
             query_is('a b'    => and(atom('a'), atom('b')),      '1.3');
             query_is('(a b)'  => and(atom('a'), atom('b')),      '1.4');
             query_is('-(a b)' => or(neg(atom('a')), neg(atom('b'))),
                      '1.5 (De Morgan\'s Law)');
-        };
-        subtest '2. Missing start parenthesis' => sub {
+
+            note('2. Missing start parenthesis');
             query_is('a)' => atom('a'), '2.1');
             query_is('a b)' => and(atom('a'), atom('b')), '2.2');
             query_is('a b) c' => and(atom('a'), atom('b'), atom('c')), '2.3');
@@ -1295,8 +1360,8 @@ sub highlight {
             query_is('a, b), c' => or(atom('a'), atom('b'), atom('c')), '2.6');
             query_is('a, b), c d' => or(atom('a'), atom('b'), and(atom('c'), atom('d'))), '2.7');
             query_is('a, b) (c, d)' => and(or(atom('a'), atom('b')), or(atom('c'), atom('d'))), '2.8');
-        };
-        subtest '3. Missing end parenthesis' => sub {
+
+            note('3. Missing end parenthesis');
             query_is('(a' => atom('a'), '3.1');
             query_is('(a b)' => and(atom('a'), atom('b')), '3.2');
             query_is('a (b c' => and(atom('a'), atom('b'), atom('c')), '3.3');
@@ -1305,15 +1370,15 @@ sub highlight {
             query_is('a, (b, c' => or(atom('a'), atom('b'), atom('c')), '3.6');
             query_is('a b, (c, d' => or(and(atom('a'), atom('b')), atom('c'), atom('d')), '3.7');
             query_is('(a, b) (c, d' => and(or(atom('a'), atom('b')), or(atom('c'), atom('d'))), '3.8');
-        };
-        subtest '4. Explicit parens' => sub {
+
+            note('4. Explicit parens');
             query_is('a, b) c' => and(or(atom('a'), atom('b')), atom('c')), '4.1');
             query_is('a, b c' => or(atom('a'), and(atom('b'), atom('c'))), '4.2');
             query_is('a b, c' => or(and(atom('a'), atom('b')), atom('c')), '4.3');
             query_is('(a b), c' => or(and(atom('a'), atom('b')), atom('c')), '4.4');
             query_is('(a, b) c' => and(or(atom('a'), atom('b')), atom('c')), '4.5');
-        };
-        subtest '5. Implicit parens' => sub {
+
+            note('5. Implicit parens');
             query_is('a b, c' => or(and(atom('a'), atom('b')), atom('c')), '5.1');
             query_is('a, b c' => or(atom('a'), and(atom('b'), atom('c'))), '5.2');
             query_is('a b c, d' => or(and(atom('a'), atom('b'), atom('c')), atom('d')), '5.3');
@@ -1325,8 +1390,8 @@ sub highlight {
             query_is('a b, c' => or(and(atom('a'), atom('b')), atom('c')), '5.9');
             query_is('((a, b c) e, f)' => or(and(or(atom('a'), and(atom('b'), atom('c'))), atom('e')), atom('f')), '5.10');
             query_is('((a b, c), e f)' => or(and(atom('a'), atom('b')), atom('c'), and(atom('e'), atom('f'))), '5.11');
-        };
-        subtest '6. Single item in parenthesis' => sub {
+
+            note('6. Single item in parenthesis');
             query_is('a' => atom('a'), '6.1');
             query_is('-a' => neg(atom('a')), '6.2');
             query_is('--a' => atom('a'), '6.3');
@@ -1337,16 +1402,16 @@ sub highlight {
             query_is('-(-a)' => atom('a'), '6.8');
             query_is('(-(-a))' => atom('a'), '6.9');
             query_is('-(-(-a))' => neg(atom('a')), '6.10');
-        };
-        subtest '7. Removal of empty paren' => sub {
+
+            note('7. Removal of empty paren');
             query_is('a () b' => and(atom('a'), atom('b')), '7.1');
             query_is('a -() b' => and(atom('a'), atom('b')), '7.2');
-        };
-        subtest '8. Leading space or comma should not affect paren' => sub {
+
+            note('8. Leading space or comma should not affect paren');
             query_is('(,a b)' => and(atom('a'), atom('b')), '8.1');
             query_is('( a,b)' => or(atom('a'), atom('b')), '8.2');
-        };
-        subtest '9. Flatten parenthesis with same AND/OR as parent' => sub {
+
+            note('9. Flatten parenthesis with same AND/OR as parent');
             query_is('(a b) c' => and(atom('a'), atom('b'), atom('c')), '9.1');
             query_is('a (b c)' => and(atom('a'), atom('b'), atom('c')), '9.2');
             query_is('(a, b), c' => or(atom('a'), atom('b'), atom('c')), '9.3');
@@ -2752,6 +2817,9 @@ parentheses in query. (2026-01-14 14:47--15:36, 22:02--00:10, 2026-01-15
 02:59--06:48, 2026-01-16 11:16--12:10, 2026-01-20 16:04--17:18, 01:54--05:55,
 17:19--17:58, 22:50--23:46, 2026-01-21 01:36--04:04, 06:03--08:00, 2026-01-22
 16:27--16:33, 17:41--18:13)
+
+B<0.8.40> - Restructured & added new query parsing unit tests. (2026-01-23
+09:12--11:02)
 
 
 =head1 INTERNALS
