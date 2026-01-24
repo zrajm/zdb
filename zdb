@@ -10,8 +10,8 @@ use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
 use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zdb@zrajm.org>';
-our $VERSION='0.8.40';                         # https://semver.org/
-our $VERSION_DATE='23 January 2026';
+our $VERSION='0.8.41';                         # https://semver.org/
+our $VERSION_DATE='24 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -2072,27 +2072,113 @@ modify a database that is currently being modified by another B<zdb> instance.
 
 =head2 Version 1.0
 
-B<DONE> -- B<Write to file> -- Adding fields to existing records, and adding
-records. Should work in both 'filter mode' (input on STDIN, output on STDOUT)
-and as (atomic) writes to specified file. (Add new stuff at the end.)
+=over 2
 
-B<DONE> -- B<Case matching> -- Matching should obey case options
-B<--ignore-case> and B<--smart-case>. (Smart case being the default.)
+=item * B<Write to file> -- B<DONE>
 
-B<Fix query bugs> -- Missing leading parenthesis must work. Don't search
-comments (by default).
+These should work in both 'filter mode' (input on STDIN, output on STDOUT) and
+as (atomic) writes to specified file. (Should add new stuff to end of
+record/file.)
+
+=over 2
+
+=item * Add fields to existing record -- B<DONE>
+
+=item * Add new record -- B<DONE>
+
+=back
+
+=item * B<Case-sensitivity in matching> -- B<DONE>
+
+Matching should obey case options (B<-s>/B<--case-sensitive>,
+B<-i>/B<--ignore-case>, B<-S>/B<--smart-case>, and aliases), using smart
+matching by default.
+
+=item * B<Fix query bugs>
+
+=over 2
+
+=item * Missing leading parenthesis should work -- B<DONE>
+
+=item * Don't search comments by default
+
+=back
+
+=back
+
 
 =head2 Version 1.1
 
-B<Delete fields & records>.
+=over 2
 
-B<%fields> in database to specify sort order, and defining allowed field value
-content.
+=item * Support field name prefix (I<field>B<:>I<...>) in query
 
-B<Undo diffs> -- Updating database (when writing file) should write the
-modifications made to disk as diffs.
+=item * Record set support
 
-Moar?
+Recutils uses the database option C<B<%rec:...>> to allow multiple database
+'tables' in one file.
+
+=item * Option/options for deleting fields & records
+
+=item * Database B<%sort> for specifying field & record order
+
+B<Recutils> uses C<B<%sort:> I<field>...> to specify order of records in a
+database, and B<recfix>/B<rec2csv> has a B<--sort> option for resorting a
+database.
+
+However, B<recutils> does not seem to have a database B<%opt> for specifying
+the order of fields within a record.
+
+=item * Adding fields & records should obey database sort B<%opt>
+
+=item * Database B<%opt> for defining allowed field values
+
+An option for disallowed values, useful to avoid accidentally recycling id
+values of a record, even if a record is removed.
+
+    %typedef: TYPENAME (TYPENAME|TYPEDESC)
+    %type: FIELDNAME[,FIELDNAME]... (TYPENAME|TYPEDESC)
+
+(See: https://gnu.org/software/recutils/manual/recutils.html#Field-Types)
+
+=item * Database B<%opt> for defining allowed fields & number of records
+
+This should specify both which fields names are allowed, and their number. That
+is, one should be able to specify if a field is allowed to occur only once or
+multiple times in a record, and whether or not it is required or required. It
+corresponds to the following B<recutils> special fields:
+
+    %mandatory: FIELDNAME......
+    %allowed: FIELDNAME......
+    %prohibit: FIELDNAME......
+    %unique: FIELDNAME......
+    %key: FIELDNAME...
+    %singular: FIELDNAME...
+    %size: [OPERATOR] NUMBER...
+    %constraint: EXPRESSION...
+
+(See: https://gnu.org/software/recutils/manual/recutils.html#Constraints-on-Record-Sets)
+
+=over 2
+
+=item * Insert fields in configured order
+
+=item * Insert records in configured order
+
+=item * Option to verify order (of fields & records) in database
+
+=item * Option to re-sort (fields & records in) database
+
+=back
+
+=item * B<Undo diffs>
+
+Updating database (when writing file) should write the modifications made to
+disk as diffs.
+
+=item * Moar?
+
+=back
 
 
 =head1 FUTURE
@@ -2152,7 +2238,7 @@ time and comparing it that way.) Ideally the date comparison should extract and
 parse date in the locale specified for the field (and be able to extract all
 kinds of date formats, from 'December 1, 2020' to '2020-12-01').
 
-=item Argument to clean up query(?)
+=item Option to show cleaned up/normalized query
 
 It can sometimes be hard to know how exactly B<zdb> will interpret your query.
 Using this argument should show a cleaned up version of QUERY (suppressing
@@ -2820,6 +2906,9 @@ parentheses in query. (2026-01-14 14:47--15:36, 22:02--00:10, 2026-01-15
 
 B<0.8.40> - Restructured & added new query parsing unit tests. (2026-01-23
 09:12--11:02)
+
+B<0.8.41> - Updated L</MILESTONES> in docs. (2026-01-24 00:04--00:33,
+01:18--03:37)
 
 
 =head1 INTERNALS

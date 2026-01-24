@@ -78,6 +78,56 @@
   but having it spelled out like this makes it easier to reason about and debug
   the query. -- Which, I think would be one of the most useful aspects of a
   `--show-query` option.
+* TODO Better dumping of blessed vars in debug()
+  The debug() function should test if a package has dump() (or some other
+  name?) function and then use that to stringify the a package variable, rather
+  than have code to implement that itself.
+* TODO Add database %opt for allowed field values
+  (See: https://gnu.org/software/recutils/manual/recutils.html#Field-Types)
+  TYPEDESC can be any of:
+  ----------------------------------------
+  + range [MIN] MAX
+  + (int|real|bool)
+  + size 25
+  + regexp /REGEX/
+  + enum NAME [NAME]...
+  + (date|email|field|uuid)
+  + rec RECORDSET
+  ----------------------------------------
+** TODO %typedef: TYPENAME (TYPENAME|TYPEDESC)
+** TODO %type: FIELDNAME[,FIELDNAME]... (TYPENAME|TYPEDESC)
+* TODO Add database %opt for allowed field names
+  Are all of these really needed, or can %constraint be leveraged to cover for
+  all of them, with a cleaner, easier-to-remember syntax?
+  (See: https://gnu.org/software/recutils/manual/recutils.html#Constraints-on-Record-Sets)
+** TODO %mandatory: FIELDNAME...
+   Fields required in each record. (`%mandatory` may be used multiple times.)
+** TODO %allowed: FIELDNAME...
+   Fields allowed in each record. If used, only the fields specified by
+   `%allowed`, `%mandatory` and `%key` may occur in a record. If unused, any
+   non-prohibited field name may occur in a record. (`%allowed` may be used
+   multiple times.)
+** TODO %prohibit: FIELDNAME...
+   Fields which may may not occur within any record. (`%prohibit` may be used
+   multiple times.)
+** TODO %unique: FIELDNAME...
+   Fields which may (at most) occur only once within a single record.
+   (`%unique` may be used multiple times.)
+** TODO %key: FIELDNAME
+   Specify the 'primary key' of a record set. The given field must occur
+   exactly once in each record (as with `%unique` plus `$mandatory`), and the
+   field value of must be unique across the record set (`%singular`). (`%key`
+   may only be used once.)
+** TODO %singular: FIELDNAME
+   Field must have a unique value a cross the record set. (Rectools manual
+   doesn't mention whether `%singular` can me used multiple times, but I don't
+   see why not.)
+** TODO %size: [OPERATOR] NUMBER
+   Number of allowed records in record set. I<Operator> may be either of `<`,
+   `<=`, `>` or `=>` (without I<operator> `=` is assumed).
+** TODO %constraint: EXPRESSION
+   Apply an arbitrary constraint to a record. (`%constraint` may be used
+   multiple times.)
 * Prefix support
   For ':' matches, reduce the inputted entry by removing non-matching fields,
   and replacing them with '[]' (so that the hilite marks are still valid).
