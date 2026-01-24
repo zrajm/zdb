@@ -45,7 +45,8 @@
   + 'a  (b,c)' -> 'a ( b, c)'
   + 'a -(b c)' -> 'a (-b -c)'
   ----------------------------------------
-* TODO Argument starting with /-\W/ should be taken for QUERY
+* DONE Argument starting with /-\W/ should be taken for QUERY
+  CLOSED: [2026-01-24 Sat 04:03]
   Instead of giving an 'Unknown option' error.
   -------------------------------------------------
   $ zdb '-(hej'

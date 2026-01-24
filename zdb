@@ -10,7 +10,7 @@ use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
 use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zdb@zrajm.org>';
-our $VERSION='0.8.41';                         # https://semver.org/
+our $VERSION='0.8.42';                         # https://semver.org/
 our $VERSION_DATE='24 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -40,15 +40,16 @@ Search or update/add records in a ZDB text file database.
 Show records matching QUERY, or if FIELD=VALUE(s) are given insert those into a
 matching record (or add a new record if there is no QUERY).
 
-NOTE: If QUERY begins with hyphen ('-'), it's read as an option. Avoid this by,
-for example, adding a comma (',') to the start of QUERY (this doesn't change
-its meaning), by putting end-of-options indicator ('--') before QUERY, or by
-using the '-e' option.
+NOTE: If QUERY begins with hyphen ('-') followed by a letter or number, it's
+read as an option. Avoid this by, for example, adding a comma (',') to the
+start of QUERY (this doesn't change its meaning), by putting end-of-options
+indicator ('--') before QUERY, or by using the '-e' option.
 USAGE_END
 our $QUERY = <<"QUERY_END";
-NOTE: QUERY will be taken for an option if starts with '-'. To avoid, prefix it
-with a character that doesn't change the meaning of the query (e.g. comma ','),
-or precede the QUERY argument with the option terminator ('--').
+NOTE: QUERY will be taken for an option if starts with '-' followed by a letter
+or number. To avoid, prefix it with a character that doesn't change the meaning
+of the query (for example comma ','), or precede QUERY argument with the
+option terminator ('--').
 
 Special characters (in order of precedence)
 -------------------------------------------
@@ -1475,8 +1476,8 @@ my $write_str = '';
 @ARGV = map { decode } @ARGV;
 while (@ARGV) {
     local $_ = shift;
-    # NOTE! Shortopts with args must be in (negated) character class below!
-    s/(?<=^-[^-e]).+//x            and unshift(@ARGV, "-$&"); # bundled opts
+    # NOTE! Shortopts with args must be in `(?![...])` character class below!
+    s/(?<=^-(?![e])[0-9a-zA-Z]).+// and unshift(@ARGV, "-$&"); # bundled opts
     /^        --               $/x and do { push(@arg, @ARGV);          last };
     /^(-s    |--case-sensitive)$/x and do { $opt{case}  = 1;            next };
     /^ -c                      $/x and do { $opt{color} = 1;            next };
@@ -1498,7 +1499,7 @@ while (@ARGV) {
     /^(-v    |--verbose       )$/x and do { $opt{verbose} = 1;          next };
     /^(       --version       )$/x and do { $opt{info} = version();     next };
     /^((?!\d)\w+)        =(.*) $/x and do { $write_str .= "$1\t$2\n";   next };
-    die "Unknown option '${ s/=.*//; \$_ }'.\n" if /^-./;
+    die "Unknown option '${ s/=.*//; \$_ }'.\n" if /^-[-0-9a-zA-Z]/;
     push(@arg, $_);
 }
 
@@ -2909,6 +2910,11 @@ B<0.8.40> - Restructured & added new query parsing unit tests. (2026-01-23
 
 B<0.8.41> - Updated L</MILESTONES> in docs. (2026-01-24 00:04--00:33,
 01:18--03:37)
+
+B<0.8.42> - An argument beginning with '-' on the command line will now be
+interpreted as QUERY if the '-' isn't followed by alphanumerical character.
+That is '-(term)' and '-=term' are correctly detected as queries. (2026-01-24
+03:46-04:03)
 
 
 =head1 INTERNALS
