@@ -10,7 +10,7 @@ use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
 use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zdb@zrajm.org>';
-our $VERSION='0.8.42';                         # https://semver.org/
+our $VERSION='0.8.43';                         # https://semver.org/
 our $VERSION_DATE='24 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
@@ -187,9 +187,9 @@ sub highlight {
 # NOTE: Final record contain only whitespace (no data).
 {
     package ZDB;
-    #my $ENTRY_SEPARATOR = qr/((?:\n|\A)\n+)(?!\h)/;
-    my $FIELD_SEPARATOR = qr/(?<=\n(?!\s))/;
-    my $ENTRY_REGEX = qr/((?:.+\R(?:\R+\h)?)+)/;
+    #my $ENTRY_SEPARATOR = qr/((?:\n|\A)\n+)(?!\t)/;
+    my $FIELD_SEPARATOR = qr/(?<=\n(?!\t))/;
+    my $ENTRY_REGEX = qr/((?:.+\R(?:\R+\t)?)+)/;
     sub new {
         my ($class, %opt) = @_;
         my $tempfile = $opt{write} && $opt{file} ? ".$opt{file}.tmp"  : '';
@@ -264,8 +264,8 @@ sub highlight {
         return ()     if not defined($spc);
         return ($spc) if not defined($txt);
 
-        my $FIELD_END = qr/(\n)(?!\s)/;
-        my $FIELD_SEP = qr/\h+/;
+        my $FIELD_END = qr/(\n)(?!\t)/;
+        my $FIELD_SEP = qr/\t+/;
 
         # FIXME: Handling of comments?
         my @record; #      1    2       [3]         [4]    5
@@ -2915,6 +2915,10 @@ B<0.8.42> - An argument beginning with '-' on the command line will now be
 interpreted as QUERY if the '-' isn't followed by alphanumerical character.
 That is '-(term)' and '-=term' are correctly detected as queries. (2026-01-24
 03:46-04:03)
+
+B<0.8.43> - Restricted ZDB file format to only use <tabs> (not arbitrary space
+characters) for indentation. This lessens the likelihood of arbitrary text
+files accidentally being valid ZDB files. (2026-01-24 12:13--12:36)
 
 
 =head1 INTERNALS

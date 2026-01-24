@@ -53,7 +53,8 @@
   zdb: Unknown option '-('
   Try 'zdb --help' for more information.
   ----------------------------------------
-* TODO Database syntax -- only allow '\t' for indent
+* DONE Database syntax -- only allow '\t' for indent
+  CLOSED: [2026-01-24 Sat 12:36]
   The use of <space> for indentation makes almost all normal text files into
   valid ZDB files which makes far to easy to accidentally/unintentionally
   invoke zdb in a way which messes up some innocent text file.

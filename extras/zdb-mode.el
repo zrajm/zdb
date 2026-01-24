@@ -1,15 +1,16 @@
 ;;; zdb-mode.el --- Emacs major mode for ZDB text database files
 ;;; -*- coding: utf-8; lexical-binding: t; -*-
 
-;; Copyright 2025 zrajm, Uppsala, Sweden
+;; Copyright 2025--2026 by zrajm <zdb@zrajm.org>. License: GPLv2.
 
 ;; Author: zrajm <zdb AT klingonska.org>
-;; Version: 1.1
+;; Version: 1.2
 ;; Maintainer: zrajm
 ;; Package-Requires: ((emacs "24.1"))
 ;; URL: https://zrajm.org/zdb
 ;; Repository: https://github.com/zrajm/zdb
 ;; Created: December 2025
+;; Updated: January 2026
 ;; License: GNU General Public License Version 2
 ;; Distribution: This file is not part of Emacs
 
@@ -27,7 +28,7 @@
      (1 font-lock-comment-delimiter-face)
      (2 font-lock-comment-face))
     ;; Field names + multi-line values
-    ("^\\([_a-zA-Z%][_a-zA-Z0-9]*\\)\\(\\(\\(?:[ \t].*\\)?\n\\)+\\)"
+    ("^\\([_a-zA-Z%][_a-zA-Z0-9]*\\)\\(\\(\\(?:\t.*\\)?\n\\)+\\)"
      ;; Field name face
      (1 (if (eq (aref (match-string 1) 0) ?%)
             font-lock-keyword-face         ; starts with '%'
@@ -41,7 +42,7 @@
     ))
 
 (defconst zdb--field-header-re
-  "^\\([_a-zA-Z%][_a-zA-Z0-9]*\\)\\([ \t]+\\)"
+  "^\\([_a-zA-Z%][_a-zA-Z0-9]*\\)\\(\t+\\)"
   "Regexp matching a ZDB field header line (name + separator).")
 
 (defun zdb-fill-paragraph (&optional justify)
@@ -74,7 +75,7 @@ as subsequent lines."
         (save-excursion
           (goto-char region-start)
           (let ((sep-re (concat "^" (regexp-quote sep)))
-                (blank-re "^[ \t]*$")
+                (blank-re "^\t*$")
                 (stop nil))
             (while (and (not (eobp)) (not stop))
               (forward-line 1)

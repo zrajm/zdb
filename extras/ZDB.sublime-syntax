@@ -1,4 +1,5 @@
 %YAML 1.2
+# Copyright 2025--2026 by zrajm <zdb@zrajm.org>. License: GPLv2.
 ---
 name: ZDB
 file_extensions:
@@ -16,14 +17,14 @@ contexts:
         2: comment.line.zdb
 
     # Field names starting with %
-    - match: ^(%(?![0-9])[A-Za-z0-9_]*)([ \t]+.*)?
+    - match: ^(%(?![0-9])[A-Za-z0-9_]*)(\t+.*)?
       captures:
         1: keyword.control.zdb
         2: string.unquoted.zdb
       push: field-value
 
     # Field names starting with other chars
-    - match: ^((?![0-9])[A-Za-z0-9_]+)([ \t]+.*)?
+    - match: ^((?![0-9])[A-Za-z0-9_]+)(\t+.*)?
       captures:
         1: entity.name.function.zdb
         2: string.unquoted.zdb
@@ -35,8 +36,8 @@ contexts:
 
   field-value:
     # Continuation lines: indented or space-prefixed
-    - match: ^[ \t].*$
+    - match: ^\t.*$
       scope: string.unquoted.zdb
     # End of field value: blank line or new field
-    - match: ^(?=\S)
+    - match: ^(?=[^\t])
       pop: true
