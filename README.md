@@ -44,8 +44,8 @@ indented and may appear anywhere a *field* could.
 
 ## Fields
 
-A *field* consist of a *field name* followed by one or more whitespaces and a
-*field value*.
+A *field* consist of a *field name* followed by one or more tabs and a *field
+value*.
 
 - *Field name*
   - Is never indented.
@@ -55,7 +55,7 @@ A *field* consist of a *field name* followed by one or more whitespaces and a
 - *Field value*
   - May contain any text.
   - May include blank lines or continuation lines.
-  - Continuation lines must be indented by whitespace.
+  - Continuation lines must be indented by one or more tabs.
 
 
 ## Installation

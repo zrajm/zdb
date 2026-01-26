@@ -58,6 +58,9 @@
   The use of <space> for indentation makes almost all normal text files into
   valid ZDB files which makes far to easy to accidentally/unintentionally
   invoke zdb in a way which messes up some innocent text file.
+* DONE Document file format in manpage
+  CLOSED: [2026-01-26 Mon 09:20]
+  Add a 'ZDB FILE FORMAT' section to the manpage, after the 'QUERIES' section.
 * TODO Add query prefix '#' (comment matching)
 * TODO Add query prefix '^' (case sensitivity)
   Also change --smart-match so that an upper case letter will affect the
@@ -130,6 +133,19 @@
 ** TODO %constraint: EXPRESSION
    Apply an arbitrary constraint to a record. (`%constraint` may be used
    multiple times.)
+* TODO Change some terminology(?)
+  + special field -> metadata field
+  + (ordinary) field -> data field
+  + field value -> field content
+* TODO Two double quotes in a row should match «"»
+  Regardless of whether or not this is used inside a double quoted string or
+  not.
+* TODO Space matching
+  Maybe ditch «_» when matching spaces, and just make all space (even within
+  quotes) match any sequence of whitespace (including newlines and indentation)
+  and punctuation characters.
+
+  This kinda make sense, as punctuation is usually irrelevant.
 * Prefix support
   For ':' matches, reduce the inputted entry by removing non-matching fields,
   and replacing them with '[]' (so that the hilite marks are still valid).

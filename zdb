@@ -10,8 +10,8 @@ use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
 use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zdb@zrajm.org>';
-our $VERSION='0.8.43';                         # https://semver.org/
-our $VERSION_DATE='24 January 2026';
+our $VERSION='0.8.44';                         # https://semver.org/
+our $VERSION_DATE='26 January 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -113,7 +113,7 @@ sub version {
 
 sub manpage {
     # Run 'pod2man'.
-    open(my $fh, '-|', qw/pod2man --utf8 --errors=die/,
+    open(my $fh, '-|', qw/pod2man --quotes=none --utf8 --errors=die/,
         "--release=$PROGRAM $VERSION", __FILE__)
         or die "Can't exec 'pod2man': $!\n";
     my @manpage = <$fh>;
@@ -565,7 +565,7 @@ sub highlight {
             return $meta->{not} || ();
         };
     }
-    # Note: Doesn't do negation (done by _atom_matcher()).
+    # NOTE: Doesn't do negation (done by _atom_matcher()).
     # First argument is completely ignored here.
     sub _and_matcher {
         my (undef, @func) = @_;
@@ -576,7 +576,7 @@ sub highlight {
             return 1;
         };
     }
-    # Note: Doesn't do negation (done by _atom_matcher()).
+    # NOTE: Doesn't do negation (done by _atom_matcher()).
     # First argument is completely ignored here.
     sub _or_matcher {
         my (undef, @func) = @_;
@@ -1593,6 +1593,7 @@ should be included in a manpage.
 
 =encoding utf8
 
+
 =head1 NAME
 
 zdb - Manipulate ZDB database
@@ -1610,19 +1611,19 @@ zdb - Manipulate ZDB database
 =head1 DESCRIPTION
 
 B<zdb> is a utility for searching and manipulating human-readable text-based
-database files (in ZDB format).
+database files (in L<ZDB format|/ZDB FILE FORMAT>).
 
-The I<QUERY> language has compact but expressive syntax (inspired by search
-engines). You can use the following (in order of precedence) C<B<->> (minus)
-for NOT, C<B<␣>> (space) for AND, and C<B<,>> for OR, C<B<(>I<...>B<)>>
-(parentheses) for grouping, and C<I<FIELD>B<:>I<VALUE>> to specify which fields
-to search. Unterminated parentheses/quotes do not cause errors, but are
+The L<I<QUERY> language|/QUERIES> is compact but expressive (inspired by search
+engines). You can use the following (in order of precedence) «C<B<->>» (minus)
+for NOT, «C<B< >>» (space) for AND, and «C<B<,>>» for OR, «C<B<(>I<...>B<)>>»
+(parentheses) for grouping, and «C<I<FIELD>B<:>I<VALUE>>» to specify which
+fields to search. Unterminated parentheses/quotes do not cause errors, but are
 automatically terminated for you. (See L</QUERIES> below.)
 
-A I<FILE> of C<-> stands for standard input. When receiving input on standard
-input, B<zdb> acts like a text filter (outputting the results to standard
-output). When writing to file (that is, when I<FILE> is other than C<B<->>)
-that file is updated (atomically) on success.
+If I<FILE> is C<B<->> then standard input is read. When receiving input on
+standard input, B<zdb> acts like a text filter (outputting the results to
+standard output). When writing to file (that is, when I<FILE> is other than
+C<B<->>) the file is updated (atomically) on success.
 
 There are four different modes, depending on which of the I<QUERY> and/or
 I<FIELD>B<=>I<VALUE> arguments are provided:
@@ -1636,6 +1637,12 @@ I<FIELD>B<=>I<VALUE> arguments are provided:
     ├───────────────────┼───────────────────────────────┤            │
     │ FIELD=VALUE       │ Insert fields as new record   │            │
     └───────────────────┴───────────────────────────────┴────────────┘
+
+B<NOTE:> If I<QUERY> starts with «C<B<->I<X>>» (where I<X> is a letter or
+number) then B<zdb> will think it is an option, and fail with an "Unknown
+option" error message. This can be avoided by prefixing I<QUERY> with a comma
+«C<B<,>>» («C<B<,->I<X>>»), rephrasing I<QUERY>, using B<-e>/B<--match>, or
+preceding the I<QUERY> argument with the end-of-options indicator B<-->.
 
 
 =head1 OPTIONS
@@ -1664,7 +1671,7 @@ Force highlighting. Short for B<--color=always>. (See also B<--color>=I<WHEN>.)
 
 Disable highlighting. Short for B<--color=never>.
 
-=item B<--color>B<=>I<WHEN>, B<--colour>B<=>I<WHEN> (default C<B<auto>>)
+=item B<--color>B<=>I<WHEN>, B<--colour>B<=>I<WHEN> (default "C<B<auto>>")
 
 When to highlight search matches in the output.
 
@@ -1679,8 +1686,8 @@ option):
 
 =item * B<auto> (alias: B<tty>, B<if-tty>) enables highlighting only when
 output is connected to a terminal. -- That is, it will be disabled if user has
-piped the output to another command (S<C<| CMD>>) or directed it to a file
-(S<C<< > FILE >>>), but otherwise it will be enabled.
+piped the output to another command (with C<B<< |CMD >>>) or directed it to a
+file (C<B<< >FILE >>>), but otherwise it will be enabled.
 
 =back
 
@@ -1696,9 +1703,10 @@ allowed values.)
 =item B<-e>I<QUERY>, B<--match=>I<QUERY>
 
 Specify I<QUERY> explicitly. Useful when you don't want to put I<QUERY> as the
-first argument, or in a situation where I<QUERY> might start with C<-> and be
-interpreted as an option. (You can protect your I<QUERY> against this in other
-ways too, for example by prefixing it with C<,> or using the B<--> option.)
+first argument, or in a situation where I<QUERY> might start with "C<B<->>" and
+be interpreted as an option. (You can protect your I<QUERY> against this in
+other ways too, for example by prefixing it with "C<B<,>>" or using the
+C<B<-->> option.)
 
 If this option is repeated, the I<QUERY>(s) are OR:ed together. This means that
 a record will be considered matching if one (or more) of the I<QUERY>(s) match.
@@ -1756,7 +1764,7 @@ L</Show manpage using B<$MANPAGER>>;
 Long & short options B<-M>/B<--manual> are used by B<curl>, while B<--man> is
 used by the Perl utilities B<ack> and B<prove>.
 
-=item B<--pager=>I<CMD> (default C<B<pager>>)
+=item B<--pager=>I<CMD> (default "C<B<pager>>")
 
 Specify a which command to use as a pager. (A pager is a program like B<more>
 or B<less> which allows you to navigate through large output in a more
@@ -1770,7 +1778,7 @@ distros). The B<--pager> option overrides any B<$ZDBPAGER> or B<$PAGER>
 environment variable setting. (See also L</ENVIRONMENT>: 'B<$ZDBPAGER>,
 B<$PAGER>')
 
-B<RECOMMENDED:> Add the line C<export ZDBPAGER='less -RFXi'> to your shell's
+B<RECOMMENDED:> Add the line C<B<export ZDBPAGER='less -RFXi'>> to your shell's
 init file. This will set the B<less> options B<-R> (allow color highlighting),
 B<-F> (exit immediately if output fits on screen), B<-X> (disable screen
 clearing on exit on some terminals), and B<-i> (turn off case-insensitivity
@@ -1786,7 +1794,7 @@ Force pager. Short for B<--paging=always>. (See also B<--color>=I<WHEN>.)
 
 Disable pager. Short for B<--paging=never>.
 
-=item B<--paging>B<=>I<WHEN> (default C<B<auto>>)
+=item B<--paging>B<=>I<WHEN> (default "C<B<auto>>")
 
 When to use a pager for the output. By default a pager is only used when output
 is directed to a terminal (when not piped), but this option can be used to
@@ -1852,69 +1860,129 @@ Display a lot of output. This is mostly intended for debugging while developing
 =item B<-->
 
 Indicate end of options. This allows arguments after C<B<-->> to start with
-C<B<->>. This follows a convention given by the POSIX standard.
+"C<B<->>". This is a POSIX standard convention.
 
 =back
 
 
 =head1 QUERIES
 
-B<zdb> uses a sloppy query language, inspired by web search engines. It strives
-to be terse, intuitive, expressive, and forgiving. The "sloppy" part means that
-you don't have to care about matching parentheses and/or quotes (they will be
-terminated for you).
+B<Terse & sloppy.> Booleans are short: «C<B<,>>» (OR), «C<B< >>» (AND), «C<B<<
+- >>>» (NOT) and parentheses. Unfinished parentheses/quotes work just fine. All
+strings are valid queries. (Inspired by search engines, and how Google B<used
+to> handle quotes.)
 
-Text in quotes is always interpreted literally (any special
-characters/operators lose their meaning if they occur within quotes).
+B<Word-by-word matching.> A word in the query will only match whole words in
+the data («C<B<cat>>» only matches "cat", not "I<cat>erpillar", "bobI<cat>" or
+"conI<cat>enation"). For partial words, use «C<B<*>>» («C<B<cat*>>» matches
+"cat", "cats" and "caterpillar"). Use «C<B<_>>» to match whitespaces (this
+matches spaces, newlines & indentation).
 
-B<NOTE:> The shell processes its quotes before the arguments are ever seen by
-B<zdb>. This means that you have to quote your quotes! It's usually most
-convenient to put single quotes around your whole query (these outer quotes
-eaten by the shell) and then use double quotes inside that if you need it. For
-example:
+B<Smart case>. Query terms that are all lower case will (by default) ignore
+case in the input data, while terms with one or more upper case letters must
+match exactly (see case options B<-s>/B<--case-sensitive>,
+B<-i>/B<--ignore-case>, B<-S>/B<--smart-case>).
+
+B<Double quoted> text is interpreted literally (special characters lose their
+meaning inside quotes).---Single quotes/apostrophes, however, never have any
+special meaning.
+
+B<NOTE:> Your shell strips away a layer of quotes before the arguments are even
+seen by B<zdb>. This means that you, on the command line, need to quote your
+quotes! A simple way is to put single quotes around your whole query (which are
+then eaten by your shell) and thereafter use double quotes inside that if you
+need it. For example:
 
     zdb 'name:("crew member",crewmember)' klingon.zdb
-
-Query is matched word-by-word (C<B<cat>> does not match "cats"). An (unquoted)
-asterisk (B<*>) may be used to match zero or more letters: C<B<cat*>> matches
-both "cat" and "cats" and "catwoman"; C<B<*fix>> matches "fix", "prefix", and
-"suffix". An (unquoted) underscore (B<_>) can be used to match one or more
-whitespace characters (including newlines).
-
-By default B<-S>/B<--smart-case> is used, meaning that if I<QUERY> contain any
-uppercase letters the entire query will match as if the
-B<-s>/B<--case-sensitive> option was in effect (that is, the casing in the
-query must match exactly for the query to match). If, on the other hand, all
-the letters in I<QUERY> are lowercase, then matching will proceed as if
-B<-i>/B<--ignore-case> was in effect (and case is ignored while matching).
 
 
 =head2 Logic operators
 
-The following operators are also supported:
+The following Boolean operators are supported (with the usual precedence).
 
     ┌──────────────┬──────────────┐
     │  Character   │  Used For    │  From the most tightly binding, to the
     ├──────────────┼──────────────┤  least binding.
-    │  :  (colon)  │  prefix      │
-    ├──────────────┼──────────────┤  Thus: '-a:b, -c d' = '(-(a:b)), (-c d)'.
-    │  =  (equal)  │  whole field │
+    │  -  (minus)  │  NOT         │
+    ├──────────────┼──────────────┤  Thus '-a, -b c' is the same as
+    │  ␣  (space)  │  AND         │  '(-a), (-b c)'.
     ├──────────────┼──────────────┤
-    │  -  (minus)  │  not         │
-    ├──────────────┼──────────────┤
-    │  ␣  (space)  │  and         │
-    ├──────────────┼──────────────┤
-    │  ,  (comma)  │  or          │
-    ├──────────────┼──────────────┤  ¹ Any missing parentheses are automati-
-    │ (…) (parens) │  grouping¹   │    cally added at start/end of QUERY.
+    │  ,  (comma)  │  OR          │
+    ├──────────────┼──────────────┤  ¹ Missing parentheses are automatically
+    │ (…) (parens) │  grouping¹   │    added at start/end of QUERY.
     └──────────────┴──────────────┘
 
+Parentheses B<do not> have to be terminated, any missing parentheses are
+automatically added to the beginning/end of the query.
 
-=head2 Field prefixes
+B<NOT> («C<B<< - >>>») is actually a B<term prefix> (see next section).
+
+
+=head2 Term prefixes
+
+    ┌────────────────┬───────────────────┐
+    │  Character     │ Used For          │
+    ├────────────────┼───────────────────┤
+    │  -  (minus)    │ logical NOT       │
+    ├────────────────┼───────────────────┤
+    │  #  (hash)     │ search comments   │
+    ├────────────────┼───────────────────┤
+    │  =  (equal)    │ whole field value │
+    ├────────────────┼───────────────────┤
+    │  ^  (caret)    │ case-sensitive    │
+    └────────────────┴───────────────────┘
+
+Query term prefixes are...
+
+=over 2
+
+=item *
+
+B<versatile>. They can be put in front of any query term (both words and
+parentheses). When put in front of a parenthesis it is applies to all the terms
+inside.---The query «C<B<=noun>>» will find all records where there is a field
+with the full value 'noun', while «C<B<=(noun, verb)>>» will find all records
+with a full value of either 'noun' or 'verb'.
+
+=item *
+
+B<toggles.> Repetition of a prefix toggles it on/off. Use once to turn on,
+twice to turn off, three times to turn on again etc.---Thus C<B<nomi>> will
+find all records containing the word 'nomi', while C<B<-nomi>> will find all
+records that B<do not> contain it. Toggling is especially useful with
+parentheses: C<B<-(-nomi marks)>> will find all records that B<do> contain
+'nomi' (since it is doubly negated) but not 'marks' (since it is negated only
+once).---When negating a parenthesis De Morgan's Law is also applied, making
+C<B<-(a,b)>> equal to C<B<(-a -b)>> (as expected).
+
+=item *
+
+B<combinable.> Any number of prefixes can be used on a single term (in any
+order).---One may write C<B<--nomi>>, or C<B<-=nomi>> (etc).
+
+=item *
+
+B<unquoted.> Like other operators, a prefix loses its special meaning if
+quoted.---The query «C<B<-nomi>>» will find all records that B<do not> contain
+the word 'nomi', while «C<B<"-nomi">>» (with double quotes) will find records
+that contain the '-nomi'.
+
+=back
+
+
+=head2 Field prefix
+
+B<NOTE:> Feature not yet implemented (planned for version 1.1).
+
+    ┌──────────────┬────────────────────┐
+    │  Character   │  Used For          │
+    ├──────────────┼────────────────────┤
+    │  :  (colon)  │  field name        │
+    └──────────────┴────────────────────┘
 
 To only search a specific field, a field name prefix (I<FIELD>B<:>I<VALUE>) may
-be used. (For example, C<name:anderson> will find all occurrences of 'anderson'
-in the 'name' field.) The full syntax is:
+be used. (For example, «C<B<name:anderson>>» will find all occurrences of
+'anderson' in the 'name' field.) The full syntax is:
 
 [I<FIELD>B<:>]I<VALUE>[B<:>I<VALUE>]...
 
@@ -1923,18 +1991,19 @@ Where no C<I<FIELD>B<:>> means the same as C<B<*:>…>.
 Both I<FIELD> and I<VALUE> may be arbitrarily complex Boolean expressions.
 Since B<:> is so tightly binding, however, parentheses are required around each
 I<FIELD> and I<VALUE> containing a complex expression.
-(C<(name,alias):anderson> will find 'anderson' in either 'name' or 'alias'.)
+(«C<B<(name,alias):anderson>>» will find 'anderson' in either 'name' or
+'alias'.)
 
 When multiple I<VALUE>s are chained together (…B<:>I<VALUE>B<:>I<VALUE>),
 matching of subsequent I<VALUE> are only attempted in fields that have matched
-the previous I<VALUE>(s) in the chain. (Thus, C<name:magnus:anderson> will
+the previous I<VALUE>(s) in the chain. (Thus, «C<B<name:magnus:anderson>>» will
 match all 'name' fields which contain B<both> 'magnus' and 'anderson', and
-C<(name,alias):magnus:anderson> will match 'name' or 'alias' fields that
+«C<B<(name,alias):magnus:anderson>>» will match 'name' or 'alias' fields that
 contain B<both> 'magnus' and 'anderson' B<in the same field>.)
 
 I<FIELD:> (without a value) will match all fields with the specified name
-(regardless of value. (C<(name,alias):> will match all records that contain
-either a field called 'name' or 'alias'.)
+(regardless of value. («C<B<(name,alias):>>» will match all records that
+contain either a field called 'name' or 'alias'.)
 
 
 =head2 Quoting
@@ -1953,21 +2022,151 @@ either a field called 'name' or 'alias'.)
 
 Characters in double quotes are always matched as-is, so to search for special
 characters (parentheses, an asterisk, or spaces) put them in double quotes.
-(C<phaser pistol> finds records containing both of the words 'phaser' and
-'pistol' in either order, while C<"phaser pistol"> will find all occurrences of
-the phrase "phaser pistol".) Note also, that only B<double> quotes (B<">) have
-a special meaning, single quotes (B<'>) are taken literally. (C<d'armond> will
-find all occurrences of said name.)
+(«C<B<phaser pistol>>» finds records containing both of the words 'phaser' and
+'pistol' in either order, while «C<B<"phaser pistol">>» will find all
+occurrences of the phrase "phaser pistol".) Note also, that only B<double>
+quotes (B<">) have a special meaning, single quotes (B<'>) are taken literally
+(«C<B<d'armond>>» will find all occurrences of said name).
 
 Quotes can begin and end anywhere, and so to search for a phrase where one word
-may vary use something like B<C<"the "*" of">>. The only exception to this is
+may vary use something like «C<B<"the "*" of">>». The only exception to this is
 that two quotes in a row (regardless of whether it occurs inside or outside of
 a quote) will match a literal quote.
 
-One or more whitespace characters can be matched by an (unquoted) C<B<_>>. This
-will match across a line ending (within the same field), so that
-C<phaser_pistol> will match even if there's a newline between the words (while
-C<"phase pistol"> will match only if the words are separated by a single space).
+One or more whitespace characters can be matched by an (unquoted) «C<B<_>>».
+This will match across a line ending (within the same field), so that
+«C<B<phaser_pistol>>» will match even if there's a newline between the words
+(while «C<B<"phase pistol">>» will match only if the words are separated by a
+single space).
+
+
+=head1 ZDB FILE FORMAT
+
+The ZDB file format is, above all, built to be human-readable.
+
+A ZDB database consists of L</records>, L</fields>, L</special fields> and
+L</comments>, and one or more L</record sets>. Here's a simple address book with
+a couple of entries and some comments:
+
+    # My address book.
+
+    # A friend of mine.
+    name    Nomi Marks
+    address San Francisco
+            California
+    born    1988, August 8
+
+    # Nomi's girlfriend.
+    name    Amanita Caplan
+    address San Francisco
+            California
+
+
+=head2 Record sets
+
+B<NOTE:> Feature not yet implemented (planned for version 1.1).
+
+A ZDB file contains one or more record sets. The first record set of a file may
+be nameless/anonymous, but all subsequent ones must be explicitly declared
+using the special field B<%rec>. Each record set may have it's own record
+definition (and other settings), as defined by the special fields (field with
+names starting with C<B<%>>).
+
+
+=head2 Record
+
+A ZDB file consists of any number of B<records> (optionally divided into
+several B<L<record sets|/record sets>>). Each record consists of one or more
+B<fields> with optional B<L<comments|/comments>>. An example record:
+
+    # Nomi's girlfriend.
+    name    Amanita Caplan
+    address San Francisco
+            California
+
+Records are separated from each other by one (or more) blank lines followed by
+an unindented B<field name> or a B<comment>. If the first character after the
+blank lines is a <tab>, then this is the continuation of a L<field value|/field
+value> (and not the end of the record).
+
+
+=head2 Fields
+
+A B<field> consist of a B<field name> followed by one or more tabs and a
+B<field value>. An example field:
+
+    name    Amanita Caplan
+
+Comment lines preceding a field are considered to belonging to that field,
+meaning that when the field is moved or deleted, the comment is moved or
+deleted too.
+
+Only fields (both field names and field values) are searched by default (while
+comments are not). Though, this behavior is subject to the query prefix
+«C<B<#>>».
+
+
+=head3 B<Field name>
+
+A field name starts on the first character of a line, and matches the pattern
+C<B</[_a-zA-Z%][_a-zA-Z0-9]*/>>. If the name starts with C<B<%>>, then it is a
+L<B<special field>|/special fields>, otherwise it's a ZDB data field.
+
+
+=head3 B<Field value>
+
+The field value separated from the L<field name|/Field name> by one or more tab
+characters, and may contain any text.
+
+If it contains more than one line, then all subsequent lines (except blank
+lines) must be indented by tabs as well. If there are blank lines which are
+followed by additional lines indented by tabs, then all these lines are
+included in the field value.
+
+To decrease the likelihood of any text file being taken for a ZDB file, tabs
+are the only allowed character for indentation (even though this might not be
+the most human-friendly). This might change in the future.
+
+
+=head2 Special fields
+
+B<NOTE:> Feature not yet implemented (planned for version 1.1).
+
+Special fields follow the same syntax as L<ordinary data field|/Fields>, except
+that their L<field names|/Field name> always begin with C<B<%>>.
+
+These fields are used to define the structure of the ZDB database contents, and
+specify things such as sort order, allowed content of fields, additional
+L<B<record sets>|/record sets> etc.
+
+
+=head2 Comments
+
+Comments are B<not> searched by default, but can be searched using the
+«C<B<#>>» L<term prefix|/Term prefixes>. Example comment line:
+
+    # Nomi's girlfriend.
+
+Comment lines always start with C<B<#>> (as the first character of the line). A
+comment may consist of any number of comments lines (all adjacent, all starting
+with C<B<#>>). Comments are not allowed inside L<field values|Field values>.
+
+A comment immediately followed by a L<field|/fields> (without blank lines
+between them) is considered belonging to that field. Whenever the field is
+moved or deleted, so is the comment that belongs to it. Any final comment
+(occurring after the last field of a record) will always remain at the bottom,
+but will be moved or deleted with the record.---New fields are never inserted
+between a field and its comment.
+
+Freestanding comments are separated (by blank lines) from all adjacent records.
+There may be any number of these at the start and end of each L<record
+set|/Record sets> (including start and end of a file), but they are not allowed
+elsewhere. When a match is found inside a freestanding comment, that whole
+comment will be output, meaning that it might be beneficial to keep very large
+comments to a minimum, or break up leading/trailing freestanding comments with
+blank lines (see also L</Term prefixes>).
+
+Freestanding initial and final comments are never moved or modified by B<zdb>.
 
 
 =head1 EXIT STATUS
@@ -2013,7 +2212,7 @@ FIXME: Add missing error messages
 
 =item Can't exec 'man': I<REASON>
 
-This resulted from C<< zdb --manual >> not being able to find or execute the
+This resulted from C<B<zdb --manual>> not being able to find or execute the
 B<man> viewer needed to show the manpage. On my Linux machine the B<man>
 utility is installed by default (and is available in the Debian B<man-db>
 package). If worst comes to worst, the documentation is viewable (in the fairly
@@ -2023,7 +2222,7 @@ readable 'POD' format) by looking at the program 'binary' as well.
 
 =item Command 'pod2man' failed: I<REASON>
 
-This resulted from C<< zdb --manual >> not being able to find or execute the
+This resulted from C<B<zdb --manual>> not being able to find or execute the
 Perl utility B<pod2man>, which is used to generate the manpage. This utility
 comes with the standard Perl installation, but the documentation can also be
 found inside the B<zdb> source code itself (and is fairly readable).
@@ -2047,7 +2246,7 @@ B<$ZDBPAGER> may contain any command or command pipeline. But it is inadvisable
 to put a command pipeline in B<$PAGER>, as, for example B<man> (which also
 reads this variable) does not allow it.
 
-B<RECOMMENDED:> Add the line C<export ZDBPAGER='less -RFXi'> to your shell's
+B<RECOMMENDED:> Add the line C<B<export ZDBPAGER='less -RFXi'>> to your shell's
 init file. This will set the B<less> options B<-R> (allow color highlighting),
 B<-F> (exit immediately if output fits on screen), B<-X> (disable screen
 clearing on exit on some terminals), and B<-i> (turn off case-insensitivity
@@ -2070,6 +2269,7 @@ modify a database that is currently being modified by another B<zdb> instance.
 
 
 =head1 MILESTONES
+
 
 =head2 Version 1.0
 
@@ -2187,6 +2387,7 @@ disk as diffs.
 Below are some planned future features. (Some section has separate FIXME
 comments that will be fixed in the future as well.)
 
+
 =head2 Query improvements
 
 =over 4
@@ -2200,8 +2401,8 @@ https://perl.com/pub/2012/05/perlunicookbook-unicode-normalization.html
 
 =item Query prefix for case-sensitive matching
 
-The prefix C<B<^>> should be added. It should toggle exact case matching for
-any individual search term. Thus C<B<^Scandinavia>> can be used to specify that
+The prefix «C<B<^>>» should be added. It should toggle exact case matching for
+any individual search term. Thus «C<B<^Scandinavia>>» can be used to specify that
 only the capitalized version of the word should be matched.
 
 =item Don't search comments by default
@@ -2224,12 +2425,13 @@ prefix B<%rec:…>?
 
 =item Match numbers
 
-Use C<[…]> to match numbers. The brackets themselves will match a number in the
-text (a regex like C<< [+-]?(\d*\.)?\d+ >>, though that doesn't cover numbers
-in scientific notation). After matching the mathematical expression inside the
-brackets will be applied as well, so that an empty bracket C<[]> matches any
-number; C<[E<lt>100]> matches any number below 100; C<[1990..2020]> will match
-a number between 1990 and 2020 (inclusive), and C<[=42]> matches the number 42.
+Use «C<[…]>» to match numbers. The brackets themselves will match a number in
+the text (a regex like C<B<[+-]?(\d*\.)?\d+>>, though that doesn't cover
+numbers in scientific notation). After matching the mathematical expression
+inside the brackets will be applied as well, so that an empty bracket
+«C<B<[]>>» matches any number; «C<B<[E<lt>100]>>» matches any number below 100;
+«C<B<[1990..2020]>>» will match a number between 1990 and 2020 (inclusive), and
+«C<B<[=42]>>» matches the number 42.
 
 =item Match dates
 
@@ -2247,6 +2449,7 @@ search). -- Should this also simplify Boolean logic? Or just show what the
 query looks like after the shell has stripped its quoting? Both?
 
 =back
+
 
 =head2 Highlighting
 
@@ -2294,6 +2497,7 @@ with B<%>) and field values.
 
 =back
 
+
 =head2 Unit tests
 
 =over 4
@@ -2301,9 +2505,10 @@ with B<%>) and field values.
 =item Speed up program load time?
 
 Is compilation of tests slowing B<zdb> down? If so, there is some module which
-puts selected code after C<__DATA__> block. Use that to speed things up?
+puts selected code after C<B<__DATA__>> block. Use that to speed things up?
 
 =back
+
 
 =head2 Database verification and format
 
@@ -2327,8 +2532,8 @@ to the data type of a field?) which would list all the characters of that
 alphabet. Any accented characters occurring in that set (such as Swedish åäö)
 should be treated as different from the other characters, while any other
 accented character should match the corresponding unaccented one. (That is,
-decompose all characters (with C<NFD()>) and then precompose all accented
-characters from the B<%alphabet> set (with C<NFC()>).
+decompose all characters (with C<B<NFD()>>) and then precompose all accented
+characters from the B<%alphabet> set (with C<B<NFC()>>).
 
 =item Automatic linebreaking
 
@@ -2375,6 +2580,7 @@ similar for checking the whole database?)
 
 =back
 
+
 =head2 Command behavior
 
 =over 4
@@ -2392,11 +2598,11 @@ pager for short output (shorter than a screenful?).
 
 =item Show manpage using B<$MANPAGER>
 
-The B<--manual> option should use the B<$MANPAGER> environment variable to
-determine how to display its manpage. Currently B<man -l -> is used to display
-the manpage, but to allow for B<$MANPAGER> the manpage should be written to
-tempfile and the manpager should be invoked as C<$MANPAGE FILE> (where I<FILE>
-is a path beginning with '.' or '/').
+The B<--manual> option should use the C<B<$MANPAGER>> environment variable to
+determine how to display its manpage. Currently C<B<man -l ->> is used to
+display the manpage, but to allow for C<B<$MANPAGER>> the manpage should be
+written to tempfile and the manpager should be invoked as C<B<$MANPAGE>
+I<FILE>> (where I<FILE> is a path beginning with 'B<.>' or 'B</>').
 
 =item Add B<+> option
 
@@ -2413,11 +2619,11 @@ used for each set. For example we could see something like the following to
 indicate that the field 'tlh' occurs once in 3033 records, while the field
 'cite' occurs zero times in 2627 records, once in 320 records etc.
 
-    %rec	words
-    %doc	Klingonska Akademien's Klingon Dictionary
-    tlh		1 -- 1:3033
+    %rec    words
+    %doc    Klingonska Akademien's Klingon Dictionary
+    tlh     1 -- 1:3033
     ...
-    cite	0..5,7 -- 0:2627 1:320 2:58 3:18 4:4 5:4 7:3
+    cite    0..5,7 -- 0:2627 1:320 2:58 3:18 4:4 5:4 7:3
     ...
 
 Should also have a look at what the B<recinf> command outputs for additional
@@ -2430,6 +2636,7 @@ also only need one usage line instead of two.)
 
 =back
 
+
 =head2 Undo
 
 As a database is updated, patches should be generated and saved into a
@@ -2440,6 +2647,7 @@ I<YYYYMMDDB<_>HHMMSS>B<.diff>. This way, any of the patches can be reapplied to
 undo that change.---Or, possibly, diffs could instead be added to a B<.zip>
 file (or other archive).
 
+
 =head2 Compression
 
 Using some kinda compression would be nice. The output should be ASCII safe,
@@ -2448,18 +2656,18 @@ B<'> etc which makes it (relatively) easy to include in JSON without having to
 escape stuff).
 
 The Debian package B<coreutils> comes with B<basenc> which can be used for z85
-encoding. (Encode with C<basenc --z85>, decode with C<basenc --z85 -d>.)
+encoding. (Encode with C<B<basenc --z85>>, decode with C<B<basenc --z85 -d>>.)
 
 =over 12
 
 =item Compress:
 
-C<< | xz -c | basenc  --z85 >>
+C<B<< | xz -c | basenc  --z85 >>>
 
 
 =item Decompress:
 
-C<< | basenc --z85 -d | xz -d >>
+C<B<< | basenc --z85 -d | xz -d >>>
 
 =back
 
@@ -2471,6 +2679,7 @@ input/output filtering different stages, maybe something like
 B<--format=ed25519:xz:z85> or B<--encoding=ed25519,xz,z85> (the order would
 automatically reverse on (the order would automatically reverse on
 read/decode).
+
 
 =head2 Encryption
 
@@ -2485,11 +2694,11 @@ making them ideal to feed a database through them.
 
 =item Encrypt:
 
-C<< age --armor --recipients-file=SSH_PUBKEY >>
+C<B<< age --armor --recipients-file=SSH_PUBKEY >>>
 
 =item Decrypt:
 
-C<< age --decrypt --identity=SSH_KEYFILE >>
+C<B<< age --decrypt --identity=SSH_KEYFILE >>>
 
 =back
 
@@ -2507,12 +2716,14 @@ Additionally, it'd be kinda nice to compress the datastream before encrypting
 it. The compression schema should be specifiable when writing the file, chosen
 automatically on reading (and rewriting, unless overridden by option).
 
+
 =head2 Add date fields
 
 Date fields should allow for the kind of date available in B<recutils>, but
 also allow for simple YYYY only, or YYYY-MM etc. (Like 'date --iso=...' but
 also for 'month' and 'year', and also the ones supported by date: 'date',
 'hour', 'minute', 'second', 'ns')
+
 
 =head2 Deleting records & fields
 
@@ -2522,8 +2733,8 @@ individual fields. (B<iptables>, B<rsync> and B<git branch> all use
 B<--delete>, and with B<iptables> and B<git branch> using shortopt B<-D>.)
 
 Deleting specific fields (when there are multiple of the same name), should use
-some kind of numbering. Maybe something like C<B<author[2]>> or C<B<author.2>>
-to delete the second 'author' field?
+some kind of numbering. Maybe something like «C<B<author[2]>>» or
+«C<B<author.2>>» to delete the second 'author' field?
 
 Or maybe use some other scheme? (Like using I<FIELD>B<=>I<VALUE> pairs with
 empty value to remove a field---though that might be better reserved for
@@ -2532,10 +2743,10 @@ creating a field, without giving it a value.)
 
 =head2 Hierarchical fields
 
-Each record would be what YAML calls a 'document' (separated by C<---> on a
+Each record would be what YAML calls a 'document' (separated by "C<--->" on a
 line of its own). This also requires support for more complicated data
 structures (necessitating hierarchical field names). YAML also have alias
-support, and a string like C<false> will, if unquoted, be interpreted
+support, and a string like C<B<false>> will, if unquoted, be interpreted
 differently depending on schema. So schemas need to be in place for this to be
 implementable (see https://spacelift.io/blog/yaml).
 
@@ -2548,6 +2759,7 @@ relevant) for each song. Also, there should then be a way to define that I want
 to search 'song' and 'artist' fields, but only when they apply to the same song
 (using the album's 'artist', if the song does not have an artist field of its
 own).
+
 
 =head2 Boolean operator aliases
 
@@ -2574,12 +2786,13 @@ some other name for the operator. For the spelled out versions of the operators
 capital letters are required (lower case should always match the words
 literally), and (of course) it'll only work when they're unquoted.
 
-Also the more C-like versions C<< && >> and C<< || >> will have exactly same
-effect as their non-doubled counterparts---the parser simply sees an empty
+Also the more C-like versions C<B<< && >>> and C<B<< || >>> will have exactly
+same effect as their non-doubled counterparts---the parser simply sees an empty
 search expression between them (which counts as nothing) and the result is the
 same as the non-doubled version.
 
-For C<< ! >>, however, this is not true, and doubling that negates the negation.
+For C<B<< ! >>>, however, this is not true, and doubling that negates the
+negation.
 
 
 =head1 HISTORY
@@ -2646,7 +2859,7 @@ B<v0.5.1> - Expanded manpage. Improved chapters DESCRIPTION, QUERIES
 (subchapters 'Logic Operators', 'Field Prefixes' and 'Quoting'). Added and
 clarified a buncha stuff on the L</FUTURE> wishlist. (2025-11-25 08:49--11:29)
 
-B<v0.5.2> - Moved C<< END {} >> block to after info variables. (2025-11-25
+B<v0.5.2> - Moved C<B<END {}>> block to after info variables. (2025-11-25
 12:31--12:36)
 
 B<v0.6.0> - Added B<-e>/B<--match> option and removed B<-f>/B<--file> option.
@@ -2675,12 +2888,12 @@ approaching done, but generating the query function from the parse tree remains
 to do be done. Also, the internal representation of the parse tree will most
 likely change. (2025-11-28 18:30--13:45)
 
-B<v0.7.1> - Added tests for C<Query::_parse()>, and got the 'bottomless' stack
-feature to work (meaning that unmatched ')' in the syntax query now works too).
-(2025-11-30 13:20--14:11, 20:20--22:12; 2025-12-01 08:16--10:40, 11:21--13:50,
-15:50--16:48, 23:03--23:34)
+B<v0.7.1> - Added tests for C<B<Query::_parse()>>, and got the 'bottomless'
+stack feature to work (meaning that unmatched ')' in the syntax query now works
+too). (2025-11-30 13:20--14:11, 20:20--22:12; 2025-12-01 08:16--10:40,
+11:21--13:50, 15:50--16:48, 23:03--23:34)
 
-B<v0.7.2> - Test callback function now declared using C<sub {}>. (2025-12-01
+B<v0.7.2> - Test callback function now declared using C<B<sub {}>>. (2025-12-01
 23:42--23:50)
 
 B<v0.7.3> - Remove use of 'plain' object property when parsing (& testing)
@@ -2738,7 +2951,7 @@ language (L<https://zrajm.org/teckentranskription/lexicon-tests.html>).
 (2025-12-04 07:50--12:14)
 
 B<v0.7.19> - Implemented query B<Query::_normalize()>, which moves query
-prefixes C<B<->> and C<B<=>> to the leaf nodes of the query, applying De
+prefixes «C<B<->>» and «C<B<=>>» to the leaf nodes of the query, applying De
 Morgan's Law. This makes sure that match highlighting works, by no query term
 negated more than once. Also added the tests required to test the new function,
 and adapted the test functions for this. (2025-12-04 00:56--01:49,
@@ -2754,8 +2967,8 @@ B<v0.7.22> - Cleanup of unused code. (2025-12-06 04:38--04:50)
 
 B<v0.7.23> - Minor change in argument parsing. (2025-12-07 20:44--21:01)
 
-B<v0.7.24> - QUERY prefixes C<B<->> and C<B<=>> now work in search. (2025-12-07
-21:01--22:19)
+B<v0.7.24> - QUERY prefixes «C<B<->>» and «C<B<=>>» now work in search.
+(2025-12-07 21:01--22:19)
 
 B<v0.7.25> - Added query compilation 'lang' argument for specifying which
 functions to use for AND/OR and string matching in the finalized query. The
@@ -2763,7 +2976,8 @@ purpose of these is to be able to provide alternate functions, e.g. for
 producing highlighted output, for dumping the query in cleaned up form.
 (2025-12-07 22:19--22:48)
 
-B<v0.7.26> - Renamed query type C<word> to C<atom>. (2025-12-07 22:48--23:06)
+B<v0.7.26> - Renamed query type C<B<word>> to C<B<atom>>. (2025-12-07
+22:48--23:06)
 
 B<v0.7.27> - Minor docs update on internal structure. (2025-12-07 23:06--23:21)
 
@@ -2888,8 +3102,8 @@ B<0.8.33> - Minor cleanup of Query::Stack. (2026-01-11 20:06--20:22)
 B<0.8.34> - Changed internal data structure in Query::Stack. (2026-01-11
 20:31--20:48)
 
-B<0.8.35> - Support for missing start parentheses C<B<(>> in query. (2026-01-13
-21:32--22:39)
+B<0.8.35> - Support for missing start parentheses «C<B<(>>» in query.
+(2026-01-13 21:32--22:39)
 
 B<0.8.36> - Make test function query_is() accept array return value.
 (2026-01-15 15:09--15:16)
@@ -2920,8 +3134,12 @@ B<0.8.43> - Restricted ZDB file format to only use <tabs> (not arbitrary space
 characters) for indentation. This lessens the likelihood of arbitrary text
 files accidentally being valid ZDB files. (2026-01-24 12:13--12:36)
 
+B<0.8.44> - Described ZDB file format in manual + many other small manual
+updates. (2026-01-25 21:40--09:18)
+
 
 =head1 INTERNALS
+
 
 =head2 Internal query format
 
@@ -2936,12 +3154,12 @@ have a type of either AND or OR). The query parser also adds additional
 intermediate nodes, where needed to resolve Boolean operator precedence.
 
 After parsing the query, the resulting query tree is normalized. This turns the
-query into Negation Normal Form, by moving any use of negation (C<->), and
-exact field match (C<=>) prefixes out into the leaf nodes of the query. These
-operations are thus only performed once during a search. (That is, search
-query like C<-(-x y)> is internally turned into C<(x,-y)> before matching is
-attempted).---This is allows doubly negated terms to be highlighted in the
-search result, and simplifies traversal of the intermediate nodes.
+query into Negation Normal Form, by moving any use of negation («C<B<->>»), and
+exact field match («C<B<=>>») prefixes out into the leaf nodes of the query.
+These operations are thus only performed once during a search. (That is, search
+query like «C<B<-(-x y)>>» is internally turned into «C<B<(x,-y)>>» before
+matching is attempted).---This is allows doubly negated terms to be highlighted
+in the search result, and simplifies traversal of the intermediate nodes.
 
 Finally the query is compiled into a function which, when passed the contents
 of a database record, determines whether that particular record matches the
@@ -2951,10 +3169,10 @@ character offsets used for the highlighting.)
 
 =head2 Internal database representation
 
-In the main loop C<read_record()> is called over and over until the entire file
-has been read. (And the query is used in turn for each record to determine
-whether or not it matches.) C<read_record()> returns two values, the first of
-which is a string, and the second a list-of-lists. The initial string as all
+In the main loop C<B<read_record()>> is called over and over until the entire
+file has been read. (And the query is used in turn for each record to determine
+whether or not it matches.) C<B<read_record()>> returns two values, the first
+of which is a string, and the second a list-of-lists. The initial string as all
 whitespace leading up to the record, and the list of list contain a listref for
 each field. The syntax for these listrefs are:
 
@@ -2980,8 +3198,8 @@ After some research I don't think this issue B<needs> addressing. That
 terminals B<don't> extend the end-of-line background color to the right margin
 is the right thing to do in my eyes. Keeping it here for future reference.
 
-B<$GREP_COLORS> contain a feature C<B<ne>> which for handling the terminal
-feature 'back color erase' (B<bce>). Should B<zdb> also do this? When is it
+C<B<$GREP_COLORS>> contain a feature C<B<ne>> which for handling the terminal
+feature 'back color erase' (C<B<bce>>). Should B<zdb> also do this? When is it
 relevant?
 
 The (often quite opinionated) developer of Kitty (the terminal I'm currently
@@ -3032,6 +3250,7 @@ This is how to set up tab completion for B<zdb>. I've only listed how to do it
 for B<zsh> since that's the shell I'm using. Feel free to contribute
 suggestions for other shells!
 
+
 =head2 Tab completion for Zsh
 
 To get autocompletion of B<zdb> options in B<zsh>, create a file called F<_zdb>
@@ -3071,7 +3290,7 @@ intensity will not increase beyond that.
 =head1 EXAMPLES
 
 The following command (which does not contain a search query) will create a new
-record with fields C<name> and C<age> (containing 'Nomi Marks' and '29'
+record with fields C<B<name>> and C<B<age>> (containing 'Nomi Marks' and '29'
 respectively) in the file F<contacts.zdb>.
 
    zdb name='Nomi Marks' age=29 contacts.zdb
@@ -3085,10 +3304,10 @@ highlighted.
    zdb 'Nomi Marks' contacts.zdb
 
 The following performs the same search as above, but instead of showing the
-result, the fields C<city> and C<state> (with the values "San Francisco" and
-"California") are inserted into the matching record. If more than one record
-(or no records at all) matches the query, the command will abort with an error
-message (without modifying F<contacts.zdb>).
+result, the fields C<B<city>> and C<B<state>> (with the values "San Francisco"
+and "California") are inserted into the matching record. If more than one
+record (or no records at all) matches the query, the command will abort with an
+error message (without modifying F<contacts.zdb>).
 
    zdb 'Nomi Marks' city="San Francisco" state=California contacts.zdb
 
@@ -3101,7 +3320,7 @@ called F<klingon.zdb>, and to search for the word 'phaser' I can simply write:
 
      ./klingon.zdb phaser
 
-To achieve this, a (relatively complicated) shebang (C<#!>) line needs to be
+To achieve this, a (relatively complicated) shebang (C<B<#!>>) line needs to be
 added to the top of the database file. This shebang invokes B<zdb>, and
 rearranges the arguments so that name of the database file occurs last in the
 command. The following B<shebang> can be used:
@@ -3137,7 +3356,7 @@ L<https://klingonska.org>.
 License GPLv2: GNU General Public License version 2 or later
 L<https://gnu.org/licenses/gpl-2.0.html>. This is free software: you are free
 to change and redistribute it. There is NO WARRANTY, to the extent permitted by
-law. (See also C<zdb --version>.)
+law. (See also C<B<zdb --version>>.)
 
 
 =head1 SEE ALSO
