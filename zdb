@@ -1,4 +1,4 @@
-#!/bin/env perl
+#!/usr/bin/env perl
 
 # https://perl.com/pub/2012/04/perlunicook-standard-preamble.html
 use utf8;      # so literals and identifiers can be in UTF-8
@@ -10,8 +10,8 @@ use open      qw(:std :encoding(utf-8)); # undeclared streams in UTF-8
 use charnames qw(:full :short);          # unneeded in v5.16
 
 our $AUTHOR='zrajm <zdb@zrajm.org>';
-our $VERSION='0.8.44';                         # https://semver.org/
-our $VERSION_DATE='26 January 2026';
+our $VERSION='0.8.45';                         # https://semver.org/
+our $VERSION_DATE='2 February 2026';
 our $CREATED_DATE='11 November 2025'; # never change this!
 our $PROGRAM = (split '/', decode(__FILE__))[-1];
 our $USAGE = <<"USAGE_END";
@@ -3136,6 +3136,8 @@ files accidentally being valid ZDB files. (2026-01-24 12:13--12:36)
 
 B<0.8.44> - Described ZDB file format in manual + many other small manual
 updates. (2026-01-25 21:40--09:18)
+
+B<0.8.45> - Changed path of B<env> in the shebang. (2026-02-02 14:44--14:46)
 
 
 =head1 INTERNALS
